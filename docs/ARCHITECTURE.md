@@ -1,5 +1,30 @@
 # Nearby stations proxy trust boundary
 
+## Corridor and geocoding server boundary
+
+Authenticated geocode and corridor endpoints delegate strict validated inputs to
+services and typed repositories. The shared upstream fetcher permits only HTTPS
+on exact Nominatim, OSRM, and OCM hostnames, rejects credentials, nondefault ports
+and redirects, bounds streamed JSON to two MiB, and applies abort timeouts.
+Nominatim receives a custom identifying User-Agent and India-only queries; search
+text and coordinates are never logged. Upstream DTOs are schema-validated.
+
+Local city/highway autocomplete matches return immediately, with best-effort
+background Nominatim enrichment merged into the cache for subsequent searches.
+Searches use a process-global one-request-per-second Nominatim
+throttle and a 500-entry, 24-hour cache. OSRM routes use a bounded five-minute
+cache keyed by four-decimal endpoints. Failed routes are explicitly flagged
+great-circle fallbacks with five-kilometre geometry steps and 55 km/h estimates.
+Detours are approximate twice-perpendicular distances, not road directions.
+Corridor candidates combine seeds within expanded bounds and OCM queries at at
+most eight route samples; remote coverage is best-effort, not exhaustive.
+
+The existing API and Origin/CSRF controls cover both endpoints; additional IP
+limits are 30 geocode and 10 corridor requests per minute. All caches, throttles,
+and limits are process-local. Public provider availability, distributed throttling,
+and ingress-controlled DNS/forwarded-IP trust remain deployment concerns. Browser
+CSP does not change because upstream access is server-only.
+
 Authenticated `GET /api/stations/nearby` validates strict allowlisted query parameters before delegating to the station service and typed repositories. Existing `/api/*` middleware rate limiting applies. Session cookies are read from request headers, never reconstructed as requests. Responses expose only station DTOs; error responses are generic and uncached, successful responses are private for 30 seconds.
 
 The OCM repository is the only external station egress: HTTPS `api.openchargemap.io/v3/poi`, constant host verification, redirects rejected, a three-second abort signal, and a streamed two-MiB response bound. The optional server-only API key is sent only as `X-API-Key`. Zod validates upstream fields, removes control characters and limits text lengths; markup remains plain text and must never be rendered as HTML. Unknown connector types are dropped; unknown tariffs are null. Operational OCM connectors indicate availability only approximately, not live occupancy.

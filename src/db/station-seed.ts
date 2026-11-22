@@ -1,4 +1,5 @@
 import { NETWORKS, NETWORK_LABELS, type StationDto } from "../domain/station";
+import { LANDMARK_SEED } from "./landmark-seed";
 
 const CITIES = [
   {
@@ -114,6 +115,24 @@ function station(
     lastUpdated: "2026-01-01T00:00:00.000Z",
   };
 }
+function addHighwayStations(
+  stations: StationDto[],
+  random: () => number,
+): void {
+  for (const landmark of LANDMARK_SEED.filter((place) =>
+    /NH(65|44|48)/.test(place.name),
+  )) {
+    stations.push(
+      station(
+        stations.length,
+        landmark.lat,
+        landmark.lng,
+        `${landmark.name} Highway Charging Hub`,
+        random,
+      ),
+    );
+  }
+}
 function generateStations(): StationDto[] {
   const random = seededRandom();
   const stations: StationDto[] = [];
@@ -149,6 +168,7 @@ function generateStations(): StationDto[] {
       );
     }
   }
+  addHighwayStations(stations, random);
   return stations;
 }
 export const STATION_SEED: readonly StationDto[] = generateStations();
