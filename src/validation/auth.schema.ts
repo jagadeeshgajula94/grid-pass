@@ -46,7 +46,7 @@ export const registerSchema = z
       .min(2)
       .max(80)
       .regex(
-        /^[\p{L} .'-]+$/u,
+        /^[\p{L}\p{M} .'-]+$/u,
         "Use letters, spaces, periods, apostrophes or hyphens",
       ),
     email,

@@ -21,6 +21,20 @@ import { env } from "../src/lib/env";
 const REQUEST_ID = "request-id";
 
 beforeEach(resetMockStore);
+it.each(["प्रिया शर्मा", "Priya Nair", "Jose\u0301 Silva"])(
+  "accepts letters with combining marks in full name %s",
+  (fullName) => {
+    expect(registerSchema.shape.fullName.parse(fullName)).toBe(fullName);
+  },
+);
+it.each(["", "<script>", "Owner123"])(
+  "rejects invalid full name %s",
+  (fullName) => {
+    expect(registerSchema.shape.fullName.safeParse(fullName).success).toBe(
+      false,
+    );
+  },
+);
 it("exports password rules and strict normalized schemas", () => {
   expect(PASSWORD_RULES.every((rule) => rule.test("ValidExample123!"))).toBe(
     true,
