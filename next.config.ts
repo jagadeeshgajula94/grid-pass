@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import { env } from "./src/lib/env";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["argon2"],
   poweredByHeader: false,
   async headers() {
     return [

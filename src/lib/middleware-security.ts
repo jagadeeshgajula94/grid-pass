@@ -1,0 +1,61 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { RateLimiter } from "./rate-limit";
+import { SlidingWindowLimiter } from "./sliding-window-limiter";
+import { clientIp } from "./client-ip";
+import { hasTrustedOrigin } from "./origin-check";
+import { SESSION_COOKIE, verifySessionToken } from "../services/session-token";
+
+let apiLimiter = new RateLimiter();
+let authLimiter = new SlidingWindowLimiter();
+const AUTH_PATHS = ["/api/auth/login", "/api/auth/register"];
+const PROTECTED_PREFIXES = ["/map"];
+export function resetLimiters(): void {
+  apiLimiter = new RateLimiter();
+  authLimiter = new SlidingWindowLimiter();
+}
+function limitedResponse(result: {
+  isAllowed: boolean;
+  retryAfter: number;
+}): NextResponse | undefined {
+  if (result.isAllowed) return undefined;
+  return NextResponse.json(
+    { error: "Too many requests" },
+    { status: 429, headers: { "Retry-After": String(result.retryAfter) } },
+  );
+}
+export function checkApi(request: NextRequest): NextResponse | undefined {
+  const path = request.nextUrl.pathname;
+  if (!path.startsWith("/api/")) return undefined;
+  if (
+    ["POST", "PUT", "PATCH", "DELETE"].includes(request.method) &&
+    !hasTrustedOrigin(
+      request,
+      process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+    )
+  )
+    return NextResponse.json({ error: "Untrusted origin" }, { status: 403 });
+  const general = limitedResponse(apiLimiter.consume(clientIp(request)));
+  if (general) return general;
+  if (request.method === "POST" && AUTH_PATHS.includes(path))
+    return limitedResponse(authLimiter.consume(`${path}:${clientIp(request)}`));
+  return undefined;
+}
+export async function checkPage(
+  request: NextRequest,
+): Promise<NextResponse | undefined> {
+  const path = request.nextUrl.pathname;
+  const isProtected = PROTECTED_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
+  );
+  if (!isProtected) return undefined;
+  const identity = await verifySessionToken(
+    request.cookies.get(SESSION_COOKIE)?.value ?? "",
+    process.env.AUTH_SECRET ?? "",
+  );
+  if (!identity) {
+    const target = new URL("/login", request.url);
+    target.searchParams.set("next", path);
+    return NextResponse.redirect(target);
+  }
+  return undefined;
+}
