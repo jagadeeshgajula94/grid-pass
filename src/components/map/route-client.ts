@@ -84,9 +84,10 @@ async function plannerRequest<T>(
 export async function fetchPlaces(
   query: string,
   signal: AbortSignal,
+  mode: "local" | "search" = "local",
 ): Promise<Result<PlaceDto[] | null, AppError>> {
   const result = await plannerRequest(
-    `/api/geocode/search?${new URLSearchParams({ q: query })}`,
+    `/api/geocode/search?${new URLSearchParams({ q: query, mode })}`,
     placesSchema,
     signal,
   );

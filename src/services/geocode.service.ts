@@ -2,12 +2,22 @@ import type { PlaceDto } from "../domain/route";
 import { haversineKm } from "../lib/geo";
 import { TtlCache } from "../lib/ttl-cache";
 import { logEvent } from "../lib/logger";
+import { AppError } from "../lib/errors";
+import type { Result } from "../lib/result";
 import {
   LandmarkGeocodeRepository,
   NominatimGeocodeRepository,
   type GeocodeRepository,
 } from "../repositories/geocode.repository";
 let nextUpstreamAt = 0;
+async function reserveSearchSlot(): Promise<boolean> {
+  const now = Date.now();
+  const waitMs = Math.max(0, nextUpstreamAt - now);
+  if (waitMs > 1500) return false;
+  nextUpstreamAt = now + waitMs + 1000;
+  if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
+  return true;
+}
 export class GeocodeService {
   private readonly cache = new TtlCache<PlaceDto[]>(500, 24 * 60 * 60 * 1000);
   constructor(
@@ -17,21 +27,23 @@ export class GeocodeService {
   async search(
     query: string,
     requestId = crypto.randomUUID(),
-  ): Promise<PlaceDto[]> {
+    mode: "local" | "search" = "local",
+  ): Promise<Result<PlaceDto[], AppError>> {
     const key = query.toLocaleLowerCase();
-    const cached = this.cache.get(key);
-    if (cached) return structuredClone(cached);
+    const cached = mode === "search" ? this.cache.get(key) : undefined;
+    if (cached) return { ok: true, value: structuredClone(cached) };
     const local = await this.local.search(query);
     const places = local.ok ? local.value : [];
-    if (Date.now() < nextUpstreamAt) return places;
-    nextUpstreamAt = Date.now() + 1000;
-    const enriched = this.enrich(query, places, requestId);
-    if (!places.length) return enriched;
-    this.cache.set(key, places);
-    void enriched.catch(() =>
-      logEvent("warn", "geocode.upstream_unavailable", requestId),
-    );
-    return structuredClone(places);
+    if (mode === "local") return { ok: true, value: places };
+    if (!(await reserveSearchSlot()))
+      return {
+        ok: false,
+        error: new AppError(
+          "UPSTREAM_UNAVAILABLE",
+          "Place search busy. Please retry.",
+        ),
+      };
+    return { ok: true, value: await this.enrich(query, places, requestId) };
   }
   private async enrich(
     query: string,
@@ -57,6 +69,7 @@ const service = new GeocodeService();
 export function searchPlaces(
   query: string,
   requestId?: string,
-): Promise<PlaceDto[]> {
-  return service.search(query, requestId);
+  mode: "local" | "search" = "local",
+): Promise<Result<PlaceDto[], AppError>> {
+  return service.search(query, requestId, mode);
 }
