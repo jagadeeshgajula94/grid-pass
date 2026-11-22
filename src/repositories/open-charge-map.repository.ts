@@ -35,17 +35,15 @@ function connectorsOf(poi: OcmPoi): ConnectorDto[] {
       [2, "CHADEMO"],
     ]).get(connection.ConnectionTypeID);
     return type
-      ? [
-          {
-            type,
-            powerKw: connection.PowerKW ?? 0,
-            tariffInrPerKwh: null,
-            status:
-              connection.StatusType?.IsOperational === true
-                ? ("available" as const)
-                : ("offline" as const),
-          },
-        ]
+      ? Array.from({ length: connection.Quantity }, () => ({
+          type,
+          powerKw: connection.PowerKW ?? 0,
+          tariffInrPerKwh: null,
+          status:
+            connection.StatusType?.IsOperational === true
+              ? ("available" as const)
+              : ("offline" as const),
+        }))
       : [];
   });
 }

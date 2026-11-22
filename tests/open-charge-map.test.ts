@@ -124,3 +124,49 @@ it("maps aborts to an error Result", async () => {
     ).ok,
   ).toBe(false);
 });
+it("expands quantities into independent ports and defaults omitted or null quantities to one", async () => {
+  const connections = [
+    {
+      ConnectionTypeID: 33,
+      Quantity: 3,
+      PowerKW: 60,
+      StatusType: { IsOperational: true },
+    },
+    { ConnectionTypeID: 25 },
+    { ConnectionTypeID: 2, Quantity: null },
+    { ConnectionTypeID: 999, Quantity: 2 },
+  ];
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(Response.json([{ ...poi, Connections: connections }]));
+  const result = await new HttpOpenChargeMapRepository(
+    "key",
+    fetcher,
+  ).findNearby(center, 5);
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw result.error;
+  const ports = result.value[0]?.connectors;
+  expect(ports?.map((port) => port.type)).toEqual([
+    "CCS2",
+    "CCS2",
+    "CCS2",
+    "TYPE2",
+    "CHADEMO",
+  ]);
+  expect(ports?.filter((port) => port.status === "available")).toHaveLength(3);
+  expect(ports?.[0]).not.toBe(ports?.[1]);
+});
+it.each([0, 21, 1.5])("rejects invalid port quantity %s", async (Quantity) => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(
+      Response.json([
+        { ...poi, Connections: [{ ConnectionTypeID: 33, Quantity }] },
+      ]),
+    );
+  const result = await new HttpOpenChargeMapRepository(
+    "key",
+    fetcher,
+  ).findNearby(center, 5);
+  expect(result.ok).toBe(false);
+});

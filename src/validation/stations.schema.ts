@@ -44,6 +44,13 @@ export const ocmPoiSchema = z.object({
     .array(
       z.object({
         ConnectionTypeID: z.number().int(),
+        Quantity: z
+          .number()
+          .int()
+          .min(1)
+          .max(20)
+          .nullish()
+          .transform((value) => value ?? 1),
         PowerKW: z.number().min(0).max(400).nullish(),
         StatusType: z
           .object({ IsOperational: z.boolean().nullish() })
