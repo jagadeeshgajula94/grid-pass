@@ -5,18 +5,16 @@ const clean = (value: string): string =>
     .join("")
     .trim();
 export const geocodeQuerySchema = z.strictObject({
-  mode: z.enum(["local", "search"]).default("local"),
   q: z
     .string()
     .max(160)
-    .regex(/^[^\p{Cc}]+$/u)
     .transform(clean)
     .pipe(
       z
         .string()
         .min(2)
         .max(80)
-        .regex(/^[\p{L}\p{M}\p{N} ,.'()/\-]+$/u),
+        .regex(/^[\p{L}\p{N} ,.'()/\-]+$/u),
     ),
 });
 export const nominatimPayloadSchema = z

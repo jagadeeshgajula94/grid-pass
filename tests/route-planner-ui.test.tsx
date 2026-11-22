@@ -155,24 +155,6 @@ it("shows an empty search and safe error without exposing upstream details", asy
     "Connection unavailable",
   );
 });
-it("requests Nominatim only after explicit Enter or Search places, not typing", async () => {
-  vi.useFakeTimers();
-  const fetcher = mockPlanner();
-  render(<PlaceAutocomplete label="Destination" value="" onSelect={vi.fn()} />);
-  const input = screen.getByRole("combobox");
-  fireEvent.change(input, { target: { value: "Vijay" } });
-  await act(() => vi.advanceTimersByTimeAsync(250));
-  expect(fetcher.mock.calls[0]?.[0]).toContain("mode=local");
-  fireEvent.keyDown(input, { key: "Enter" });
-  await act(() => vi.advanceTimersByTimeAsync(0));
-  expect(fetcher.mock.calls[1]?.[0]).toContain("mode=search");
-  fireEvent.click(screen.getByRole("button", { name: "Search places" }));
-  await act(() => vi.advanceTimersByTimeAsync(0));
-  expect(fetcher.mock.calls[2]?.[0]).toContain("mode=search");
-  fireEvent.change(input, { target: { value: "Other" } });
-  await act(() => vi.advanceTimersByTimeAsync(250));
-  expect(fetcher.mock.calls[3]?.[0]).toContain("mode=local");
-});
 it("ignores stale corridor completions and reports request failures", async () => {
   const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error("offline"));
   vi.stubGlobal("fetch", fetcher);

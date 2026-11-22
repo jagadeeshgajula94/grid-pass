@@ -6,12 +6,6 @@ verification, not an external penetration test or production certification.
 
 ## Findings and changes
 
-- Public Nominatim is used only for explicit searches (`mode=search`), never
-  typing/autocomplete. The default validated mode is local landmarks only.
-  Explicit searches await the next one-second global slot (maximum 1.5-second
-  wait); excess queue demand returns uncached 503 with Retry-After, not an empty
-  search result. Successful explicit results remain cached for 24 hours.
-
 - **Bound auth input before parsing.** Login/register previously called
   `request.json()` without a byte bound. `src/lib/request-body.ts` now shares the
   corridor parser's streamed 4 KiB limit; declared and actual sizes are checked

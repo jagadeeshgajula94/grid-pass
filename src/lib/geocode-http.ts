@@ -9,21 +9,8 @@ export function handleGeocode(request: Request): Promise<NextResponse> {
     if (!parsed.success) return invalidRequest(parsed.error);
     if (new Set(params.keys()).size !== [...params.keys()].length)
       return invalidRequest();
-    const result = await searchPlaces(
-      parsed.data.q,
-      requestId,
-      parsed.data.mode,
-    );
-    if (!result.ok)
-      return NextResponse.json(
-        { error: result.error.message },
-        {
-          status: 503,
-          headers: { "Cache-Control": "no-store", "Retry-After": "1" },
-        },
-      );
     return NextResponse.json(
-      { places: result.value },
+      { places: await searchPlaces(parsed.data.q, requestId) },
       { headers: { "Cache-Control": "private, max-age=60" } },
     );
   });
