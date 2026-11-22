@@ -1,8 +1,22 @@
 import { expect, it, vi } from "vitest";
-import { StationService } from "../src/services/station.service";
+import { StationService, merge } from "../src/services/station.service";
 import { STATION_SEED } from "../src/db/station-seed";
 import { AppError } from "../src/lib/errors";
 const query = { lat: 17.385, lng: 78.4867, radiusKm: 5 };
+it("deduplicates ids before names or coordinates and preserves local priority", () => {
+  const station = STATION_SEED[1];
+  if (!station) throw new Error("Missing seed");
+  const renamed = {
+    ...station,
+    name: "Unrelated renamed provider",
+    lat: station.lat + 0.01,
+  };
+  const distinct = { ...renamed, id: "distinct" };
+  expect(merge([station, renamed], [renamed])).toEqual([station]);
+  expect(merge([], [station, renamed])).toEqual([station]);
+  expect(merge([station], [distinct])).toEqual([station, distinct]);
+  expect(merge([], [])).toEqual([]);
+});
 it("merges, dedupes and caches unfiltered cell candidates", async () => {
   const station = STATION_SEED[1];
   if (!station) throw new Error("Missing seed");

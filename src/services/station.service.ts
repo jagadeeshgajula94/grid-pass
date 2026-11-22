@@ -32,8 +32,14 @@ function similarName(a: string, b: string): boolean {
   );
 }
 export function merge(local: StationDto[], remote: StationDto[]): StationDto[] {
-  const merged = [...local];
-  for (const station of remote) {
+  const ids = new Set<string>();
+  const firstById = (station: StationDto): boolean => {
+    const duplicate = ids.has(station.id);
+    ids.add(station.id);
+    return !duplicate;
+  };
+  const merged = local.filter(firstById);
+  for (const station of remote.filter(firstById)) {
     if (
       !merged.some(
         (existing) =>
