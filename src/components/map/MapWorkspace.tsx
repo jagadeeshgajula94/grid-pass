@@ -82,7 +82,11 @@ function usePlannerIntents(
       onCurrent: requestFitAfter(planner.onCurrent, requestFit),
       onOrigin: requestFitAfter(planner.onOrigin, requestFit),
       onDestination: requestFitAfter(planner.onDestination, requestFit),
-      onBuffer: requestFitAfter(planner.onBuffer, requestFit),
+      onBuffer: (buffer): void => {
+        if (buffer === planner.bufferKm) return;
+        planner.onBuffer(buffer);
+        requestFit();
+      },
       onClear: requestFitAfter(planner.onClear, requestFit),
       onSwap: requestFitAfter(planner.onSwap, requestFit),
     },

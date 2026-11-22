@@ -19,16 +19,27 @@ import {
   plannerStation,
 } from "./planner-ui-fixtures";
 const NEARBY_RING = "Nearby ring";
+const ROUTE_POLYLINE = "Route polyline";
 const SEARCH_PLACES = "Search places";
 const EXPLICIT_SEARCH_MODE = "mode=search";
 const ARIA_ACTIVE_DESCENDANT = "aria-activedescendant";
 const ARIA_EXPANDED = "aria-expanded";
 const GUEST_RANGE = "Sign in to see range for your EV";
+const FIT_REQUEST = "data-fit-request";
 vi.mock("next/dynamic", () => ({
   default:
     () =>
-    ({ corridor }: { corridor: boolean }): React.ReactElement => (
-      <div aria-label={corridor ? "Route polyline" : "Nearby ring"} />
+    ({
+      corridor,
+      fitRequest,
+    }: {
+      corridor: boolean;
+      fitRequest: number;
+    }): React.ReactElement => (
+      <div
+        aria-label={corridor ? ROUTE_POLYLINE : NEARBY_RING}
+        data-fit-request={fitRequest}
+      />
     ),
 }));
 vi.mock("next/navigation", () => ({
@@ -83,7 +94,7 @@ it("switches to numbered corridor cards, opens the drawer, filters and clears ba
   expect(screen.getByLabelText(NEARBY_RING)).toBeInTheDocument();
   await planTrip();
   expect(screen.queryByLabelText(NEARBY_RING)).toBeNull();
-  expect(screen.getByLabelText("Route polyline")).toBeInTheDocument();
+  expect(screen.getByLabelText(ROUTE_POLYLINE)).toBeInTheDocument();
   expect(
     screen.getByText("1", { selector: ".stop-number" }),
   ).toBeInTheDocument();
@@ -127,6 +138,23 @@ it("refetches on buffer changes and swaps endpoints", async () => {
   expect(screen.getByRole("combobox", { name: "Destination" })).toHaveValue(
     "Hyderabad",
   );
+});
+it("does not refit or refetch when the active corridor buffer is reselected", async () => {
+  const fetcher = mockPlanner();
+  render(<MapWorkspace />);
+  await planTrip();
+  for (const buffer of [5, 10, 2]) {
+    const button = screen.getByRole("button", { name: `${buffer} km` });
+    fireEvent.click(button);
+    await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "true"));
+    const route = screen.getByLabelText(ROUTE_POLYLINE);
+    const request = route.getAttribute(FIT_REQUEST);
+    expect(request).not.toBeNull();
+    const requests = fetcher.mock.calls.length;
+    fireEvent.click(button);
+    expect(route).toHaveAttribute(FIT_REQUEST, request);
+    expect(fetcher).toHaveBeenCalledTimes(requests);
+  }
 });
 it("debounces autocomplete, aborts obsolete requests and supports keyboard selection", async () => {
   vi.useFakeTimers();
