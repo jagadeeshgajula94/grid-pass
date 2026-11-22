@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { findNearby } from "../services/station.service";
 import { nearbyQuerySchema } from "../validation/stations.schema";
-import { authenticatedApi, invalidRequest } from "./api-http";
+import { publicApi, invalidRequest } from "./api-http";
 export function handleNearby(request: Request): Promise<NextResponse> {
-  return authenticatedApi(request, "stations.nearby", async (requestId) => {
+  return publicApi("stations.nearby", async (requestId) => {
     const params = new URL(request.url).searchParams;
     const parsed = nearbyQuerySchema.safeParse(Object.fromEntries(params));
     if (!parsed.success) return invalidRequest(parsed.error);

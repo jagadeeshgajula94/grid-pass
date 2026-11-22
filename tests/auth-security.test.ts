@@ -17,13 +17,13 @@ function post(path = LOGIN, origin = BASE): NextRequest {
 beforeEach(resetLimiters);
 afterEach(() => vi.unstubAllEnvs());
 it.each(["", "gp_session=tampered"])(
-  "redirects unauthenticated map requests (%s)",
+  "allows unauthenticated map requests (%s)",
   async (cookie) => {
     const response = await middleware(
       new NextRequest(`${BASE}/map`, { headers: { cookie } }),
     );
-    expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe(`${BASE}/login?next=%2Fmap`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
     expect(response.headers.get("content-security-policy")).toContain("nonce-");
     expect(response.headers.get("cache-control")).toBe("no-store");
   },

@@ -8,6 +8,7 @@ import type { CorridorDto } from "../src/domain/route";
 import { routeQuerySchema } from "../src/validation/route.schema";
 import { plannerCookie } from "./planner-test-helpers";
 import { logEvent } from "../src/lib/logger";
+import { corridorFixture } from "./planner-ui-fixtures";
 const BASE = "http://localhost:3000/api/routes/corridor";
 const trip = {
   origin: { lat: 17.385, lng: 78.4867 },
@@ -21,8 +22,11 @@ function request(body: unknown, cookie = ""): Request {
     body: JSON.stringify(body),
   });
 }
-it("requires authentication", async () => {
-  expect((await POST(request(trip))).status).toBe(401);
+it("allows corridor planning without a session", async () => {
+  vi.spyOn(service, "findCorridor").mockResolvedValue(corridorFixture);
+  const response = await POST(request(trip));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(corridorFixture);
 });
 it("rejects malformed, out-of-range, extra fields and invalid buffers", async () => {
   const cookie = await plannerCookie();
@@ -65,7 +69,7 @@ it("returns densified fallback, default buffer and ordered highway stations on O
   vi.spyOn(service, "findCorridor").mockImplementation((query) =>
     routes.findCorridor(query),
   );
-  const response = await POST(request(trip, await plannerCookie()));
+  const response = await POST(request(trip));
   expect(response.status).toBe(200);
   const body = (await response.json()) as CorridorDto;
   expect(body.bufferKm).toBe(5);

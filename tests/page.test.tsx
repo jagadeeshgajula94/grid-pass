@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import React from "react";
-import { render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import Home from "../src/app/page";
 import RootLayout from "../src/app/layout";
@@ -10,9 +9,8 @@ vi.mock("next/headers", () => ({
   headers: vi.fn().mockResolvedValue(new Headers()),
 }));
 
-it("renders the minimal foundation", () => {
-  render(<Home />);
-  expect(screen.getByRole("heading", { name: "GridPass" })).toBeInTheDocument();
+it("redirects the landing page instead of rendering a login-first foundation", () => {
+  expect(() => Home()).toThrow("NEXT_REDIRECT");
 });
 
 it("provides a dynamic document layout", async () => {

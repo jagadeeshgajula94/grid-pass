@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import LoginPage from "../src/app/login/page";
 import RegisterPage from "../src/app/register/page";
 import MapPage from "../src/app/map/page";
+import Home from "../src/app/page";
 import { login } from "../src/services/auth.service";
 import { resetMockStore } from "../src/db/mock-store";
 import { verifySessionToken } from "../src/services/session-token";
@@ -44,8 +45,17 @@ it.each(pages)(
     await expect(page()).rejects.toThrow("redirect:/map");
   },
 );
-it("protects the map page and passes the first name and EV model to the workspace", async () => {
-  await expect(MapPage()).rejects.toThrow("redirect:/login");
+it("lands directly on the map", () => {
+  expect(() => Home()).toThrow("redirect:/map");
+});
+it.each(["", "tampered"])(
+  "renders the guest map with missing or invalid session %s",
+  async (token) => {
+    state.token = token;
+    expect((await MapPage()).props).toEqual({});
+  },
+);
+it("passes the active user's first name and registered EV model to the workspace", async () => {
   for (const [email, firstName] of [
     ["aarav@example.com", "Aarav"],
     ["priya@example.com", "Priya"],
@@ -61,6 +71,7 @@ it("renders both auth pages after store loss despite a valid signed JWT", async 
   await authenticate();
   await resetMockStore();
   expect(await verifySessionToken(state.token, env.AUTH_SECRET)).not.toBeNull();
+  expect((await MapPage()).props).toEqual({});
   for (const path of ["/login", "/register"]) {
     const response = await middleware(
       new NextRequest(`http://localhost:3000${path}`, {

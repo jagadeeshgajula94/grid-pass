@@ -32,3 +32,22 @@ it("requires the trusted Origin for corridor POST", () => {
     )?.status,
   ).toBe(403);
 });
+it("allows guest corridor POST only with the trusted origin", () => {
+  const url = "http://localhost:3000/api/routes/corridor";
+  expect(
+    checkApi(
+      new NextRequest(url, {
+        method: "POST",
+        headers: { origin: "http://localhost:3000" },
+      }),
+    ),
+  ).toBeUndefined();
+  expect(
+    checkApi(
+      new NextRequest(url, {
+        method: "POST",
+        headers: { origin: "https://evil.example" },
+      }),
+    )?.status,
+  ).toBe(403);
+});

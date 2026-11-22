@@ -3,14 +3,12 @@ import { RateLimiter } from "./rate-limit";
 import { SlidingWindowLimiter } from "./sliding-window-limiter";
 import { clientIp } from "./client-ip";
 import { hasTrustedOrigin } from "./origin-check";
-import { SESSION_COOKIE, verifySessionToken } from "../services/session-token";
 
 let apiLimiter = new RateLimiter();
 let authLimiter = new SlidingWindowLimiter();
 let geocodeLimiter = new SlidingWindowLimiter(30, 60_000);
 let corridorLimiter = new SlidingWindowLimiter(10, 60_000);
 const AUTH_PATHS = ["/api/auth/login", "/api/auth/register"];
-const PROTECTED_PREFIXES = ["/map"];
 export function resetLimiters(): void {
   apiLimiter = new RateLimiter();
   authLimiter = new SlidingWindowLimiter();
@@ -46,24 +44,5 @@ export function checkApi(request: NextRequest): NextResponse | undefined {
     return limitedResponse(corridorLimiter.consume(clientIp(request)));
   if (request.method === "POST" && AUTH_PATHS.includes(path))
     return limitedResponse(authLimiter.consume(`${path}:${clientIp(request)}`));
-  return undefined;
-}
-export async function checkPage(
-  request: NextRequest,
-): Promise<NextResponse | undefined> {
-  const path = request.nextUrl.pathname;
-  const isProtected = PROTECTED_PREFIXES.some(
-    (prefix) => path === prefix || path.startsWith(`${prefix}/`),
-  );
-  if (!isProtected) return undefined;
-  const identity = await verifySessionToken(
-    request.cookies.get(SESSION_COOKIE)?.value ?? "",
-    process.env.AUTH_SECRET ?? "",
-  );
-  if (!identity) {
-    const target = new URL("/login", request.url);
-    target.searchParams.set("next", path);
-    return NextResponse.redirect(target);
-  }
   return undefined;
 }

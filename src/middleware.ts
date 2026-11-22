@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { checkApi, checkPage } from "./lib/middleware-security";
+import { checkApi } from "./lib/middleware-security";
 
-export async function middleware(request: NextRequest): Promise<NextResponse> {
+export function middleware(request: NextRequest): NextResponse {
   const nonce = btoa(crypto.randomUUID());
   const policy = [
     "default-src 'self'",
@@ -23,9 +23,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   headers.set("x-nonce", nonce);
   headers.set("Content-Security-Policy", policy);
   const response =
-    checkApi(request) ??
-    (await checkPage(request)) ??
-    NextResponse.next({ request: { headers } });
+    checkApi(request) ?? NextResponse.next({ request: { headers } });
   response.headers.set("Content-Security-Policy", policy);
   response.headers.set("Cache-Control", "no-store");
   return response;
