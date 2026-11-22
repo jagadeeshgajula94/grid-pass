@@ -17,9 +17,17 @@ configuration, rejects invalid values without logging them, and has no secrets.
 Trust boundaries are browser-to-Next.js and contributor-to-CI. XSS/clickjacking
 are mitigated by nonce CSP, framework escaping, and framing restrictions;
 dependency/supply-chain risks by lockfile installs, pinned actions, audit and
-scans. This public, constant-time health endpoint has no application state;
-deployment ingress must provide request limiting before public operation, since
-per-process counters do not provide reliable multi-instance abuse protection.
+scans. Middleware rate-limits every `/api/*` request to 60 requests per minute
+per client, returning 429 with Retry-After and the same security headers. The
+fixed-window map holds at most 10,000 clients and rejects new clients at capacity
+until entries expire. Keys have bounded length. Clients without forwarding
+headers share an unknown-client bucket.
+
+The limiter is in-memory and per-instance: restarts reset it and multiple
+instances do not share counters. Production still needs ingress/edge limiting.
+The trusted ingress must strip and replace caller-supplied `x-forwarded-for`
+and `x-real-ip` headers; otherwise clients can spoof their limiter identity.
+This public health endpoint exposes only constant, non-sensitive status.
 Authentication, authorization, CSRF, durable rate limiting and persistence remain
 out of scope and require a new threat review before adding application behavior.
 
