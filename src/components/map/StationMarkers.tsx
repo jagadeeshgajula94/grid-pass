@@ -9,6 +9,7 @@ import type { StationDto } from "../../domain/station";
 import { StationPin } from "./StationPin";
 interface PinProperties {
   station: StationDto;
+  number: number;
 }
 type ClusterFeature =
   SuperclusterFeature<Record<string, never>> | PointFeature<PinProperties>;
@@ -25,10 +26,10 @@ function clusterIndex(
     radius: 80,
     maxZoom: 16,
   }).load(
-    stations.map((station) => ({
+    stations.map((station, index) => ({
       type: "Feature",
       geometry: { type: "Point", coordinates: [station.lng, station.lat] },
-      properties: { station },
+      properties: { station, number: index + 1 },
     })),
   );
 }
@@ -98,40 +99,72 @@ export function StationMarkers({
   map,
   stations,
   onSelect,
+  numbered = false,
 }: {
   map: MapLibreMap;
   stations: StationDto[];
   onSelect: (station: StationDto) => void;
+  numbered?: boolean;
 }): ReactElement {
   const index = useMemo(() => clusterIndex(stations), [stations]);
   const entries = useClusterMarkers(map, index);
   return (
     <>
       {entries.map((entry) => {
-        const properties = entry.feature.properties;
-        if ("cluster" in properties)
-          return createPortal(
-            <button
-              className="station-cluster"
-              aria-label={`Zoom into ${properties.point_count} stations`}
-              onClick={() =>
-                map.easeTo({
-                  center: entry.marker.getLngLat(),
-                  zoom: index.getClusterExpansionZoom(properties.cluster_id),
-                })
-              }
-            >
-              {properties.point_count}
-            </button>,
-            entry.element,
-            entry.key,
-          );
         return createPortal(
-          <StationPin station={properties.station} onSelect={onSelect} />,
+          <MarkerContent
+            entry={entry}
+            map={map}
+            index={index}
+            onSelect={onSelect}
+            numbered={numbered}
+          />,
           entry.element,
           entry.key,
         );
       })}
     </>
+  );
+}
+function MarkerContent({
+  entry,
+  map,
+  index,
+  onSelect,
+  numbered,
+}: {
+  entry: MarkerEntry;
+  map: MapLibreMap;
+  index: Supercluster<PinProperties, Record<string, never>>;
+  onSelect: (station: StationDto) => void;
+  numbered: boolean;
+}): ReactElement {
+  const properties = entry.feature.properties;
+  if ("cluster" in properties)
+    return (
+      <button
+        className="station-cluster"
+        aria-label={`Zoom into ${properties.point_count} ${numbered ? "stops" : "stations"}`}
+        onClick={() =>
+          map.easeTo({
+            center: entry.marker.getLngLat(),
+            zoom: index.getClusterExpansionZoom(properties.cluster_id),
+          })
+        }
+      >
+        {properties.point_count}
+      </button>
+    );
+  const { station, number } = properties;
+  return numbered ? (
+    <button
+      className="corridor-marker"
+      onClick={() => onSelect(station)}
+      aria-label={`Stop ${number}: ${station.name}`}
+    >
+      {number}
+    </button>
+  ) : (
+    <StationPin station={station} onSelect={onSelect} />
   );
 }

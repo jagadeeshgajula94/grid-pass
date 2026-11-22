@@ -234,6 +234,53 @@ it("keeps the rest of the UI usable without WebGL", () => {
     "Map unavailable on this device",
   );
 });
+it("expands corridor clusters to route-numbered pins with the original selection", () => {
+  const onSelect = vi.fn();
+  const second = { ...station, id: "two", lng: station.lng + 0.0001 };
+  const outside = { ...station, id: "outside", lng: 80 };
+  const props = {
+    center,
+    light: false,
+    selected: null,
+    onSelect,
+    corridor: true,
+  };
+  const { rerender, unmount } = render(
+    <MapCanvas {...props} stations={[outside, station, second]} />,
+  );
+  const cluster = screen.getByRole("button", { name: "Zoom into 2 stops" });
+  expect(cluster).toHaveTextContent("2");
+  expect(screen.queryByRole("button", { name: /Stop / })).toBeNull();
+  fireEvent.click(cluster);
+  expect(state.easeTo).toHaveBeenCalledWith(
+    expect.objectContaining({ zoom: 17 }),
+  );
+  expect(onSelect).not.toHaveBeenCalled();
+  state.zoom = 17;
+  emit("moveend");
+  expect(screen.queryByRole("button", { name: /Zoom into/ })).toBeNull();
+  const pin = screen.getByRole("button", { name: "Stop 3: Koti charging" });
+  expect(pin).toHaveTextContent("3");
+  expect(
+    screen.getByRole("button", { name: "Stop 2: Koti charging" }),
+  ).toHaveTextContent("2");
+  fireEvent.click(pin);
+  expect(onSelect).toHaveBeenLastCalledWith(second);
+  rerender(<MapCanvas {...props} stations={[second, station]} />);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Stop 1: Koti charging" }),
+  );
+  expect(onSelect).toHaveBeenLastCalledWith(second);
+  state.zoom = 8;
+  emit("moveend");
+  expect(
+    screen.getByRole("button", { name: "Zoom into 2 stops" }),
+  ).toBeInTheDocument();
+  rerender(<MapCanvas {...props} stations={[]} />);
+  expect(screen.queryByRole("button", { name: /Zoom into|Stop / })).toBeNull();
+  unmount();
+  expect(state.handlers.get("moveend")?.size).toBe(0);
+});
 it("hides the nearby ring in corridor mode, draws the route and restores nearby on clear", () => {
   const props = {
     center,

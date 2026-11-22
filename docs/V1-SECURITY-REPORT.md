@@ -22,9 +22,10 @@ verification, not an external penetration test or production certification.
   `TRUST_PROXY_HEADERS=true`; its startup value is validated. Tests rotate forged
   IPs and still reach 429; trusted-proxy mode retains bounded IPv4/IPv6 parsing
   and endpoint limits. `.env.example` documents the setting.
-- Low-zoom corridor marker overlap remains. Thinning/clustering was skipped to
-  avoid changing stop identity/selection in this security step. All ordered stop
-  cards remain available; zooming separates markers.
+- Corridor markers now reuse nearby mode's Supercluster index and marker
+  lifecycle. Low-zoom pins collapse to stop counts; clicking expands the cluster.
+  Stop numbers are assigned before viewport filtering, preserving list numbering
+  and selection. Tests cover expansion, reclustering, reordering and empty cleanup.
 
 ## Reviewed surface and OWASP Top 10 evidence
 
@@ -65,11 +66,13 @@ checks do not validate an actual HTTPS termination or browser HSTS deployment.
 ## Local CI-equivalent gates
 
 These commands ran locally; hosted CI has not been claimed as run.
+The clustering follow-up reran the full gate and clean build; scanner rows retain
+the Part 3 audit results.
 
 | Command                                                                                                                         | Actual result                                                                                                                                                                                                                                                                                   |
 | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `source ~/.nvm/nvm.sh; npm run typecheck && npm run lint && npm run format:check && npm run test:coverage`                      | Exit 0; SonarJS/security ESLint zero warnings; Prettier clean; 29 files / 225 tests passed. Coverage: statements 97.48%, branches 92.89%, functions 96.16%, lines 98.19% (all above 80% gates).                                                                                                 |
-| `rm -rf .next && AUTH_SECRET=$(openssl rand -base64 48) npm run build`                                                          | Exit 0; clean optimized production build, compiled in 11.6 s. Non-fatal Webpack cache warning about serializing a 105 KiB string.                                                                                                                                                               |
+| `source ~/.nvm/nvm.sh; npm run typecheck && npm run lint && npm run format:check && npm run test:coverage`                      | Exit 0; SonarJS/security ESLint zero warnings; Prettier clean; 29 files / 226 tests passed. Coverage: statements 98.31%, branches 93.08%, functions 97.78%, lines 98.91% (all above 80% gates).                                                                                                 |
+| `rm -rf .next && AUTH_SECRET=$(openssl rand -base64 48) npm run build`                                                          | Exit 0; clean optimized production build, compiled in 10.6 s. Non-fatal Webpack cache warning about serializing a 105 KiB string.                                                                                                                                                               |
 | `semgrep scan --error --metrics=off --config p/owasp-top-ten --config p/typescript --config p/nextjs --config p/security-audit` | Semgrep 1.163.0 installed via pip; exit 0, 0 findings, 123 rules run, 117 targets, ~100% parsed lines. Default scanner exclusions apply.                                                                                                                                                        |
 | `npm audit --audit-level=high`                                                                                                  | Exit 0, `found 0 vulnerabilities`; no dependency changes needed.                                                                                                                                                                                                                                |
 | `gitleaks dir . --redact --no-banner`                                                                                           | Checksum-verified 8.30.1; exit 0, no leaks in clean source tree after deleting `.next`. Initial dirty-tree scan flagged seven generated Next encryption/preview keys in ignored `.next` manifests/cache. No source finding or suppression; build artifacts must remain private and uncommitted. |
@@ -89,9 +92,15 @@ not load tests or provider SLAs.
 - Clean build: `/map` **8.55 kB**, **202 kB First Load JS** as reported by Next;
   shared First Load JS **103 kB**, middleware **74.7 kB**.
 - First Load JS excludes deferred map assets. The build's MapCanvas loadable
-  manifest references three JS chunks totaling **1,081,345 raw bytes / 299,122
+  manifest references two JS chunks totaling **1,081,023 raw bytes / 298,863
   gzip bytes**, plus **71,558 / 10,177 bytes** CSS. The separate worker is
   **540,726 / 156,093 bytes**. Gzip sizes were measured from generated files.
+- Production clustering walkthrough: 5 km / 91 stops and 10 km / 120 stops.
+  At fitted 10 km zoom, 57/58-stop city clusters, one two-stop cluster and three
+  numbered highway pins replaced the overlapping markers. Expanding Hyderabad
+  exposed numbered pins; stop 54 opened the matching Tata Power Abids Hub 9
+  drawer. Evidence: `/home/ubuntu/work/shots/corridor-clustered.png` and
+  `/home/ubuntu/work/shots/corridor-clustered-drawer.png`.
 - Hyderabad → Vijayawada, 5 km buffer: **273.4959 km, 91 stops, OSRM route**
   (`fallback=false`, local station source). First route-cache miss: **592.29 ms**.
   Five cached requests: **13.79, 12.57, 11.55, 35.36, 28.76 ms**;
