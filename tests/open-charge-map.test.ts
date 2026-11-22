@@ -38,6 +38,60 @@ it("does not fetch without a key", async () => {
   ).toEqual({ ok: true, value: [] });
   expect(fetcher).not.toHaveBeenCalled();
 });
+it("requests expanded OCM data and maps operator and operational metadata", async () => {
+  const payload = {
+    ID: 192362,
+    OperatorID: 3539,
+    OperatorInfo: { ID: 3539, Title: "Tata Power" },
+    AddressInfo: {
+      ID: 192721,
+      Title: "Tata Power - Hyderabad Central",
+      AddressLine1: "Punjagutta Road",
+      Town: "Hyderabad",
+      Latitude: center.lat,
+      Longitude: center.lng,
+    },
+    Connections: [
+      {
+        ConnectionTypeID: 33,
+        PowerKW: 60,
+        StatusTypeID: 50,
+        StatusType: { ID: 50, Title: "Operational", IsOperational: true },
+      },
+      {
+        ConnectionTypeID: 25,
+        PowerKW: 22,
+        StatusTypeID: 30,
+        StatusType: {
+          ID: 30,
+          Title: "Temporarily Unavailable",
+          IsOperational: false,
+        },
+      },
+    ],
+    DateLastStatusUpdate: "2026-01-01T00:00:00Z",
+  };
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(Response.json([payload]));
+  const result = await new HttpOpenChargeMapRepository(
+    "key",
+    fetcher,
+  ).findNearby(center, 5);
+  const url = new URL(String(fetcher.mock.calls[0]?.[0]));
+  expect(Object.fromEntries(url.searchParams)).toMatchObject({
+    compact: "false",
+    verbose: "true",
+    maxresults: "250",
+  });
+  expect(result.ok && result.value[0]).toMatchObject({
+    network: "tata-power",
+    connectors: [
+      { type: "CCS2", status: "available" },
+      { type: "TYPE2", status: "offline" },
+    ],
+  });
+});
 it.each([
   Response.json({ garbage: true }),
   new Response("x".repeat(2 * 1024 * 1024 + 1)),

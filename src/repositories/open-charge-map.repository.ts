@@ -104,9 +104,9 @@ export class HttpOpenChargeMapRepository implements OpenChargeMapRepository {
         longitude: String(center.lng),
         distance: String(radiusKm),
         distanceunit: "KM",
-        maxresults: "1000",
-        compact: "true",
-        verbose: "false",
+        maxresults: "250",
+        compact: "false",
+        verbose: "true",
       }).toString();
       if (url.hostname !== OCM_HOST || url.protocol !== "https:")
         throw new Error("Invalid upstream host");
