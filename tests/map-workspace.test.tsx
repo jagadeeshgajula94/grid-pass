@@ -109,9 +109,16 @@ it("loads the workspace, selects stations, syncs themes and locates again", asyn
   fireEvent.click(screen.getByRole("button", { name: "Toggle color theme" }));
   expect(document.documentElement).toHaveClass("light");
   fireEvent.click(screen.getByRole("button", { name: /Current location/ }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Search a place or route" }),
+  );
   expect(screen.getByRole("combobox", { name: "Origin" })).toHaveValue(
     "Hyderabad — location unavailable",
   );
+  expect(
+    screen.getByRole("region", { name: "Explore charging" }),
+  ).toHaveAttribute("data-snap", "full");
+  expect(screen.getByRole("combobox", { name: "Origin" })).toHaveFocus();
 });
 it("shows safe errors and an empty list when fetching fails", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
@@ -164,6 +171,9 @@ it.each(["success", "denied", "timeout"])(
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0]?.[0]).toContain(
       outcome === "success" ? "lat=13&lng=80" : "lat=17.385&lng=78.4867",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Search a place or route" }),
     );
     expect(screen.getByRole("combobox", { name: "Origin" })).toHaveValue(
       outcome === "success"

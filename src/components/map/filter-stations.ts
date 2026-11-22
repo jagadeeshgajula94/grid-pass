@@ -4,6 +4,7 @@ export interface StationFilters {
   speed: "all" | "ac" | "fast" | "ultra";
   network: "all" | Network;
   availableOnly: boolean;
+  minimumPowerKw?: number;
 }
 export const DEFAULT_FILTERS: StationFilters = {
   connector: "all",
@@ -38,6 +39,7 @@ export function filterStations<T extends StationDto>(
             (filters.connector === "all" ||
               connector.type === filters.connector) &&
             matchesSpeed(connector, filters.speed) &&
+            connector.powerKw >= (filters.minimumPowerKw ?? 0) &&
             (!filters.availableOnly || connector.status === "available"),
         ),
     )

@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type ReactElement } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   Map as MapLibreMap,
@@ -8,12 +14,13 @@ import {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { StationDto } from "../../domain/station";
-import type { Point } from "../../lib/geo";
+import { boundingBox, routeBounds, type Point } from "../../lib/geo";
 import { StationMarkers } from "./StationMarkers";
-import { fitCenter, fitRoute, updateRoute } from "./map-layers";
+import { updateRoute } from "./map-layers";
 import type { RouteSummaryDto } from "../../domain/route";
 import { CorridorMarkers } from "./CorridorMarkers";
 interface CanvasProps {
+  sheetHeight?: number;
   corridor?: boolean;
   route?: RouteSummaryDto;
   center: Point;
@@ -24,6 +31,9 @@ interface CanvasProps {
 }
 function styleUrl(light: boolean): string {
   return `https://basemaps.cartocdn.com/gl/${light ? "voyager" : "dark-matter"}-gl-style/style.json`;
+}
+function mapStyle(height = 150): CSSProperties {
+  return { "--sheet-offset": `${height + 12}px` } as CSSProperties;
 }
 function UserPosition({
   map,
@@ -66,7 +76,7 @@ function useMap(): {
         style: styleUrl(false),
         center: [78.4867, 17.385],
         zoom: 12,
-        attributionControl: {},
+        attributionControl: { compact: true },
       });
       instance.addControl(new NavigationControl(), "bottom-right");
       instance.on("error", () =>
@@ -103,7 +113,6 @@ function useMapView(
     const draw = (): void => updateRoute(map, corridor, center, route);
     map.on("style.load", draw);
     if (map.isStyleLoaded()) draw();
-    if (!corridor) fitCenter(map, center);
     return (): void => {
       map.off("style.load", draw);
     };
@@ -113,28 +122,68 @@ function useMapView(
       map.flyTo({
         center: [selected.lng, selected.lat],
         zoom: 15,
-        offset: [-100, 0],
+        offset: window.innerWidth >= 768 ? [190, 0] : [0, -150],
       });
-    else if (map && route && corridor) fitRoute(map, route);
   }, [map, selected, route, corridor]);
 }
-export function MapCanvas({
-  center,
-  light,
-  stations,
-  selected,
-  onSelect,
-  corridor = false,
-  route,
-}: CanvasProps): ReactElement {
+function useVisibleMap(map: MapLibreMap | null, props: CanvasProps): void {
+  const { center, route, corridor, selected, sheetHeight = 150 } = props;
+  useEffect(() => {
+    if (!map || selected) return;
+    const fit = (): void => {
+      const desktop = window.innerWidth >= 768;
+      const box =
+        corridor && route
+          ? routeBounds(route.coordinates, 1)
+          : boundingBox(center.lat, center.lng, 5);
+      const bottom = desktop
+        ? 40
+        : Math.min(sheetHeight + 24, window.innerHeight * 0.6);
+      map.fitBounds(
+        [
+          [box.west, box.south],
+          [box.east, box.north],
+        ],
+        {
+          padding: {
+            left: desktop ? 424 : 30,
+            right: desktop ? 80 : 30,
+            top: desktop ? 80 : 100,
+            bottom,
+          },
+          duration: window.matchMedia?.("(prefers-reduced-motion: reduce)")
+            .matches
+            ? 0
+            : 500,
+          maxZoom: corridor ? 13 : 14,
+        },
+      );
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return (): void => window.removeEventListener("resize", fit);
+  }, [map, center, route, corridor, selected, sheetHeight]);
+}
+export function MapCanvas(props: CanvasProps): ReactElement {
+  const {
+    center,
+    light,
+    stations,
+    selected,
+    onSelect,
+    corridor = false,
+    route,
+  } = props;
   const { container, map, error } = useMap();
   useMapView(map, center, light, selected, corridor, route);
+  useVisibleMap(map, props);
   return (
     <>
       <div
         className="map-canvas"
         ref={container}
         aria-label="Charging stations map"
+        style={mapStyle(props.sheetHeight)}
       />
       {error && (
         <p className="map-error glass" role="status">

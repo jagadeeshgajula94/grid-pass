@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
 } from "react";
@@ -17,7 +18,10 @@ import { StationDrawer } from "./StationDrawer";
 import { DEFAULT_FILTERS, filterStations } from "./filter-stations";
 import { useStations } from "./use-stations";
 import { useLocation } from "./use-location";
-import { WorkspaceHeader, WorkspaceToolbar } from "./WorkspaceControls";
+import { MapControls } from "./MapControls";
+import { BottomSheet } from "./BottomSheet";
+import { useSheet } from "./use-sheet";
+import { FilterBar } from "./FilterBar";
 import { WorkspaceNotice } from "./WorkspaceNotice";
 import { RoutePlanner } from "./RoutePlanner";
 import { useRoutePlanner } from "./use-route-planner";
@@ -101,6 +105,102 @@ function useWorkspace(): WorkspaceState {
     route: corridor.data?.route,
   };
 }
+function SheetResults({
+  state,
+  onSelect,
+  onFilters,
+}: {
+  state: WorkspaceState;
+  onSelect: (station: StationDto) => void;
+  onFilters: () => void;
+}): ReactElement {
+  return (
+    <div className="sheet-body">
+      <div aria-label={`${state.filtered.length} matching stations`}>
+        <FilterBar
+          filters={state.filters}
+          onChange={state.setFilters}
+          onExpand={() => {
+            onFilters();
+          }}
+        />
+      </div>
+      <WorkspaceNotice loading={state.loading} error={state.error} />
+      <StationList
+        stations={state.filtered}
+        onSelect={onSelect}
+        corridor={state.isCorridor}
+        bufferKm={state.planner.bufferKm}
+        loading={state.loading}
+      />
+    </div>
+  );
+}
+function useStationReturnFocus(selected: StationDto | null): void {
+  const previous = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!selected && previous.current) {
+      const result = Array.from(
+        document.querySelectorAll<HTMLButtonElement>(".station-result"),
+      ).find((button) => button.dataset.stationId === previous.current);
+      result?.focus();
+    }
+    previous.current = selected?.id;
+  }, [selected]);
+}
+interface ContentProps {
+  state: WorkspaceState;
+  evModel: string;
+  sheet: ReturnType<typeof useSheet>;
+}
+function WorkspaceContent(props: ContentProps): ReactElement {
+  const { state, evModel, sheet } = props;
+  const [view, setView] = useState<"list" | "filters">("list");
+  useStationReturnFocus(state.selected);
+  const select = (station: StationDto): void => {
+    state.setSelected(station);
+    sheet.setSnap("half");
+  };
+  if (state.selected)
+    return <StationDrawer station={state.selected} onClose={state.close} />;
+  if (view === "filters")
+    return (
+      <FilterBar
+        filters={state.filters}
+        onChange={state.setFilters}
+        expanded
+        onClose={() => setView("list")}
+      />
+    );
+  return (
+    <>
+      <RoutePlanner
+        {...state.planner}
+        evModel={evModel}
+        route={state.route}
+        onExpand={() => sheet.setSnap("full")}
+        onDestination={(place): void => {
+          state.planner.onDestination(place);
+          sheet.setSnap("half");
+        }}
+      />
+      <p className="peek-summary" aria-live="polite">
+        {state.filtered.length}{" "}
+        {state.isCorridor
+          ? "charging stops along your route"
+          : "stations nearby · within 5 km"}
+      </p>
+      <SheetResults
+        state={state}
+        onSelect={select}
+        onFilters={() => {
+          setView("filters");
+          sheet.setSnap("half");
+        }}
+      />
+    </>
+  );
+}
 export function MapWorkspace({
   firstName,
   evModel = "",
@@ -109,6 +209,8 @@ export function MapWorkspace({
   evModel?: string;
 }): ReactElement {
   const state = useWorkspace();
+  const sheet = useSheet();
+  const [sheetHeight, setSheetHeight] = useState(150);
   return (
     <main className="map-workspace">
       <MapCanvas
@@ -116,34 +218,22 @@ export function MapWorkspace({
         light={state.light}
         stations={state.filtered}
         selected={state.selected}
-        onSelect={state.setSelected}
+        onSelect={(station): void => {
+          state.setSelected(station);
+          sheet.setSnap("half");
+        }}
         corridor={state.isCorridor}
         route={state.route}
+        sheetHeight={sheetHeight}
       />
-      <WorkspaceHeader firstName={firstName} onTheme={state.setLight} />
-      <section className="planner-toolbar">
-        <RoutePlanner
-          {...state.planner}
-          evModel={evModel}
-          route={state.route}
-        />
-        <WorkspaceToolbar
-          count={state.filtered.length}
-          filters={state.filters}
-          onFilters={state.setFilters}
-        />
-      </section>
-      <WorkspaceNotice loading={state.loading} error={state.error} />
-      <StationList
-        stations={state.filtered}
-        onSelect={state.setSelected}
-        corridor={state.isCorridor}
-        bufferKm={state.planner.bufferKm}
-        loading={state.loading}
+      <MapControls
+        firstName={firstName}
+        onTheme={state.setLight}
+        onRecenter={state.planner.onCurrent}
       />
-      {state.selected && (
-        <StationDrawer station={state.selected} onClose={state.close} />
-      )}
+      <BottomSheet sheet={sheet} onHeight={setSheetHeight}>
+        <WorkspaceContent state={state} evModel={evModel} sheet={sheet} />
+      </BottomSheet>
     </main>
   );
 }

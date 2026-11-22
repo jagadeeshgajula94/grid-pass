@@ -1,4 +1,5 @@
-import type { ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
+import { Search, ArrowUpDown, ChevronUp } from "lucide-react";
 import type { PlaceDto, RouteSummaryDto } from "../../domain/route";
 import { PlaceAutocomplete } from "./PlaceAutocomplete";
 import { rangeContext } from "./ev-range";
@@ -14,6 +15,7 @@ export interface PlannerProps {
   onClear: () => void;
   onBuffer: (buffer: number) => void;
   onCurrent: () => void;
+  onExpand?: () => void;
 }
 function PlannerInputs(props: PlannerProps): ReactElement {
   return (
@@ -29,7 +31,7 @@ function PlannerInputs(props: PlannerProps): ReactElement {
         disabled={!props.destination}
         aria-label="Swap origin and destination"
       >
-        ⇄
+        <ArrowUpDown size={18} />
       </button>
       <PlaceAutocomplete
         label="Destination"
@@ -39,11 +41,35 @@ function PlannerInputs(props: PlannerProps): ReactElement {
     </div>
   );
 }
-function PlannerActions(props: PlannerProps): ReactElement {
+function RouteSummary(
+  props: PlannerProps & { onEdit: () => void },
+): ReactElement {
   return (
-    <div className="planner-actions">
-      <button onClick={props.onCurrent}>◎ Current location</button>
+    <>
+      <div className="route-summary">
+        <div>
+          <strong>
+            {props.route
+              ? `${Math.round(props.route.totalDistanceKm)} km · ${Math.round(props.route.estimatedDurationMin)} min`
+              : "Finding your route…"}
+          </strong>
+          <span>
+            {props.route?.fallback
+              ? "Approximate route · roads unavailable"
+              : "Driving route"}
+          </span>
+        </div>
+        <button
+          className="edit-route"
+          onClick={props.onEdit}
+          aria-label={props.destination?.name ?? "Edit route"}
+        >
+          <Search size={18} />
+        </button>
+        <button onClick={props.onClear}>Clear Route ×</button>
+      </div>
       <div className="buffer-toggle" role="group" aria-label="Corridor buffer">
+        <span>Search along route</span>
         {[2, 5, 10].map((buffer) => (
           <button
             key={buffer}
@@ -54,23 +80,65 @@ function PlannerActions(props: PlannerProps): ReactElement {
           </button>
         ))}
       </div>
-      {props.destination && (
-        <button onClick={props.onClear}>Clear Route ×</button>
-      )}
+    </>
+  );
+}
+function ExpandedSearch({
+  props,
+  onCollapse,
+}: {
+  props: PlannerProps;
+  onCollapse: () => void;
+}): ReactElement {
+  const inputs = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    inputs.current
+      ?.querySelector<HTMLInputElement>('[role="combobox"]')
+      ?.focus();
+  }, []);
+  return (
+    <div ref={inputs} className="expanded-search" onFocus={props.onExpand}>
+      <PlannerInputs
+        {...props}
+        onDestination={(place): void => {
+          props.onDestination(place);
+          onCollapse();
+        }}
+      />
+      <button className="current-location" onClick={props.onCurrent}>
+        ◎ Current location
+      </button>
+      <p className="origin-hint">{props.originName}</p>
     </div>
   );
 }
 export function RoutePlanner(props: PlannerProps): ReactElement {
+  const [expanded, setExpanded] = useState(false);
+  const expand = (): void => {
+    setExpanded(true);
+    props.onExpand?.();
+  };
   return (
-    <section className="route-planner glass" aria-label="Route planner">
-      <div className="planner-heading">
-        <span>
-          {props.destination ? "02 / ROUTE CORRIDOR" : "01 / NEARBY RADAR"}
-        </span>
-        <span>INDIA / EV NETWORK</span>
-      </div>
-      <PlannerInputs {...props} />
-      <PlannerActions {...props} />
+    <section className="route-planner" aria-label="Route planner">
+      {(!props.destination || expanded) && (
+        <button
+          className="search-pill"
+          onClick={expanded ? (): void => setExpanded(false) : expand}
+          aria-expanded={expanded}
+        >
+          <Search size={20} />
+          <span>
+            {props.destination
+              ? props.destination.name
+              : "Search a place or route"}
+          </span>
+          {expanded && <ChevronUp size={18} />}
+        </button>
+      )}
+      {expanded && (
+        <ExpandedSearch props={props} onCollapse={() => setExpanded(false)} />
+      )}
+      {props.destination && <RouteSummary {...props} onEdit={expand} />}
       <p className="range-context">
         {rangeContext(
           props.evModel,
@@ -78,15 +146,6 @@ export function RoutePlanner(props: PlannerProps): ReactElement {
           props.route?.fallback,
         )}
       </p>
-      {props.route && (
-        <p className="route-summary">
-          {Math.round(props.route.totalDistanceKm)} km <span> / </span>
-          {Math.round(props.route.estimatedDurationMin)} min ·{" "}
-          {props.route.fallback
-            ? "Approximate route · roads unavailable"
-            : "Driving route"}
-        </p>
-      )}
     </section>
   );
 }

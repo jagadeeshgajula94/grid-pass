@@ -60,6 +60,9 @@ function mockPlanner(fallback = false): ReturnType<typeof vi.fn<typeof fetch>> {
   return fetcher;
 }
 async function planTrip(): Promise<void> {
+  fireEvent.click(
+    screen.getByRole("button", { name: "Search a place or route" }),
+  );
   fireEvent.change(screen.getByRole("combobox", { name: "Destination" }), {
     target: { value: "Vijay" },
   });
@@ -74,6 +77,7 @@ it("switches to numbered corridor cards, opens the drawer, filters and clears ba
   render(<MapWorkspace firstName="Aarav" evModel="Tata Nexon EV" />);
   await screen.findByText(plannerStation.name);
   expect(screen.getByText("Hello, Aarav")).toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Account"));
   expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
   expect(screen.getByLabelText(NEARBY_RING)).toBeInTheDocument();
@@ -86,19 +90,19 @@ it("switches to numbered corridor cards, opens the drawer, filters and clears ba
   fireEvent.click(screen.getByRole("button", { name: /Highway Charge/ }));
   expect(screen.getByRole("dialog")).toBeInTheDocument();
   fireEvent.keyDown(window, { key: "Escape" });
+  expect(screen.getByRole("button", { name: /Highway Charge/ })).toHaveFocus();
+  fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
   fireEvent.change(screen.getByLabelText("Connector"), {
     target: { value: "CHADEMO" },
   });
+  fireEvent.click(screen.getByRole("button", { name: "Back to stations" }));
   expect(screen.getByText(/No stations match/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Clear Route/ }));
   expect(screen.getByLabelText(NEARBY_RING)).toBeInTheDocument();
   expect(
     screen.getByRole("complementary", { name: "Nearby stations" }),
   ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "5 km" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  expect(screen.queryByRole("group", { name: "Corridor buffer" })).toBeNull();
 });
 it("refetches on buffer changes and swaps endpoints", async () => {
   const fetcher = mockPlanner();
@@ -113,6 +117,7 @@ it("refetches on buffer changes and swaps endpoints", async () => {
       }),
     ),
   );
+  fireEvent.click(screen.getByRole("button", { name: destination.name }));
   fireEvent.click(
     screen.getByRole("button", { name: "Swap origin and destination" }),
   );

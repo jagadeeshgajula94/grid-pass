@@ -133,6 +133,53 @@ beforeEach(() => {
   state.fail = false;
 });
 afterEach(cleanup);
+it("fits above the measured phone sheet and updates padding on resize", () => {
+  vi.stubGlobal("innerWidth", 390);
+  vi.stubGlobal("innerHeight", 844);
+  vi.stubGlobal("matchMedia", () => ({ matches: true }));
+  const { rerender } = render(
+    <MapCanvas
+      center={center}
+      light={false}
+      stations={[]}
+      selected={null}
+      onSelect={vi.fn()}
+      sheetHeight={422}
+    />,
+  );
+  expect(state.fitBounds).toHaveBeenLastCalledWith(
+    expect.any(Array),
+    expect.objectContaining({
+      padding: { left: 30, right: 30, top: 100, bottom: 446 },
+      duration: 0,
+    }),
+  );
+  expect(screen.getByLabelText("Charging stations map")).toHaveStyle({
+    "--sheet-offset": "434px",
+  });
+  vi.stubGlobal("innerWidth", 768);
+  fireEvent(window, new Event("resize"));
+  expect(state.fitBounds).toHaveBeenLastCalledWith(
+    expect.any(Array),
+    expect.objectContaining({
+      padding: { left: 424, right: 80, top: 80, bottom: 40 },
+    }),
+  );
+  rerender(
+    <MapCanvas
+      center={center}
+      light={false}
+      stations={[]}
+      selected={station}
+      onSelect={vi.fn()}
+      sheetHeight={422}
+    />,
+  );
+  expect(state.flyTo).toHaveBeenCalledWith(
+    expect.objectContaining({ offset: [190, 0] }),
+  );
+  vi.unstubAllGlobals();
+});
 it("renders React pins, a center marker and radius; re-adds layers on style changes", () => {
   const onSelect = vi.fn();
   const { rerender, unmount } = render(
