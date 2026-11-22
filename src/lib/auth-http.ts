@@ -13,6 +13,13 @@ import { sessionCookieOptions } from "../services/session.service";
 import { SESSION_COOKIE } from "../services/session-token";
 
 const RESPONSE_HEADERS = { "Cache-Control": "no-store" };
+function requestToken(request: Request): string {
+  return (
+    new NextRequest(request.url, { headers: request.headers }).cookies.get(
+      SESSION_COOKIE,
+    )?.value ?? ""
+  );
+}
 type ParsedBody = { ok: true; value: unknown } | { ok: false };
 async function readBody(request: Request): Promise<ParsedBody> {
   try {
@@ -53,8 +60,11 @@ async function authenticate(
   if (!parsed.success) return validationResponse(parsed.error);
   const result =
     kind === "login"
-      ? await login(loginSchema.parse(parsed.data))
-      : await register(registerSchema.parse(parsed.data));
+      ? await login(loginSchema.parse(parsed.data), requestToken(request))
+      : await register(
+          registerSchema.parse(parsed.data),
+          requestToken(request),
+        );
   if (!result.ok) return errorResponse(result.error);
   const response = NextResponse.json(
     { user: result.value.user },
@@ -90,10 +100,7 @@ async function dispatch(
 ): Promise<NextResponse> {
   if (action === "login" || action === "register")
     return authenticate(request, action);
-  const token =
-    new NextRequest(request.url, { headers: request.headers }).cookies.get(
-      SESSION_COOKIE,
-    )?.value ?? "";
+  const token = requestToken(request);
   if (action === "logout") {
     await logout(token);
     const response = new NextResponse(null, {

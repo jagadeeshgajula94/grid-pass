@@ -95,6 +95,43 @@ it("rejects duplicate email and normalizes email", async () => {
   ).toBe(201);
   expect((await register(request("register", profile))).status).toBe(409);
 });
+it("revokes the previous session on re-login but preserves it on failed login", async () => {
+  const original = await register(request("register", profile));
+  const oldCookie = cookieOf(original);
+  const failed = await login(
+    request(
+      "login",
+      { email: profile.email, password: "incorrect" },
+      oldCookie,
+    ),
+  );
+  expect(failed.status).toBe(401);
+  expect((await me(request("me", undefined, oldCookie))).status).toBe(200);
+  const authenticated = await login(
+    request("login", { email: profile.email, password }, oldCookie),
+  );
+  expect(authenticated.status).toBe(200);
+  expect((await me(request("me", undefined, oldCookie))).status).toBe(401);
+  expect(
+    (await me(request("me", undefined, cookieOf(authenticated)))).status,
+  ).toBe(200);
+});
+it("revokes an existing session when registering another account", async () => {
+  const original = await register(request("register", profile));
+  const oldCookie = cookieOf(original);
+  const registered = await register(
+    request(
+      "register",
+      { ...profile, email: "another@example.com" },
+      oldCookie,
+    ),
+  );
+  expect(registered.status).toBe(201);
+  expect((await me(request("me", undefined, oldCookie))).status).toBe(401);
+  expect(
+    (await me(request("me", undefined, cookieOf(registered)))).status,
+  ).toBe(200);
+});
 it.each([
   { ...profile, password: "weak" },
   { ...profile, extra: true },

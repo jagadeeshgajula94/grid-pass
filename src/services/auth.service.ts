@@ -32,6 +32,7 @@ function toDto(user: User): UserDto {
 
 export async function register(
   input: RegisterInput,
+  previousToken = "",
 ): Promise<Result<Authenticated, AppError>> {
   const { password, ...profile } = input;
   const result = await users.create({
@@ -39,17 +40,12 @@ export async function register(
     passwordHash: await hashPassword(password),
   });
   if (!result.ok) return result;
-  return {
-    ok: true,
-    value: {
-      user: toDto(result.value),
-      token: await createSession(result.value.id),
-    },
-  };
+  return authenticateUser(result.value, previousToken);
 }
 
 export async function login(
   input: LoginInput,
+  previousToken = "",
 ): Promise<Result<Authenticated, AppError>> {
   const user = await users.findByEmail(input.email);
   const matches = await verifyPassword(
@@ -61,6 +57,14 @@ export async function login(
       ok: false,
       error: new AppError("INVALID_CREDENTIALS", "Invalid email or password"),
     };
+  return authenticateUser(user, previousToken);
+}
+
+async function authenticateUser(
+  user: User,
+  previousToken: string,
+): Promise<Result<Authenticated, AppError>> {
+  await revokeSession(previousToken);
   return {
     ok: true,
     value: { user: toDto(user), token: await createSession(user.id) },
