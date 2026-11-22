@@ -74,7 +74,11 @@ excluded assets and errors; HSTS is production-only. Theme preference applies
 after mount without an inline script. No raw HTML rendering is used.
 
 Both limiters are per-instance: restarts reset counters and replicas do not share
-them. Production needs ingress/edge limiting. Trusted ingress must strip and
+them. Auth-screen redirects run in server pages and require an active session via
+the current-user service; middleware only gates protected routes by JWT signature.
+A still-signed cookie without a session record therefore cannot cause a redirect
+loop between the map and login after process-memory loss.
+Production needs ingress/edge limiting. Trusted ingress must strip and
 replace caller-supplied x-forwarded-for and x-real-ip; otherwise clients can spoof
 limiter identity. Clients without these headers share an unknown bucket.
 

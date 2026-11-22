@@ -19,6 +19,9 @@ import RegisterPage from "../src/app/register/page";
 
 const navigation = vi.hoisted(() => ({ replace: vi.fn(), refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+vi.mock("../src/lib/auth-page", () => ({
+  redirectAuthenticatedUser: vi.fn().mockResolvedValue(undefined),
+}));
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -154,7 +157,7 @@ it("composes login and register pages", async () => {
     screen.getByRole("heading", { name: "Welcome back." }),
   ).toBeInTheDocument();
   cleanup();
-  render(<RegisterPage />);
+  render(await RegisterPage());
   expect(
     screen.getByRole("heading", { name: "Make the connection." }),
   ).toBeInTheDocument();

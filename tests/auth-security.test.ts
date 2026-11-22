@@ -27,7 +27,7 @@ it.each(["", "gp_session=tampered"])(
     expect(response.headers.get("cache-control")).toBe("no-store");
   },
 );
-it("allows JWT holders on map and redirects them off auth screens", async () => {
+it("allows JWT holders on map and delegates auth screens to server pages", async () => {
   const token = await createSession("owner-id");
   const headers = { cookie: `gp_session=${token}` };
   expect(
@@ -35,10 +35,8 @@ it("allows JWT holders on map and redirects them off auth screens", async () => 
       .status,
   ).toBe(200);
   expect(
-    (
-      await middleware(new NextRequest(`${BASE}/login`, { headers }))
-    ).headers.get("location"),
-  ).toBe(`${BASE}/map`);
+    (await middleware(new NextRequest(`${BASE}/login`, { headers }))).status,
+  ).toBe(200);
   expect((await middleware(new NextRequest(`${BASE}/register`))).status).toBe(
     200,
   );

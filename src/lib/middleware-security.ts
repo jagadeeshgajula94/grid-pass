@@ -47,18 +47,15 @@ export async function checkPage(
   const isProtected = PROTECTED_PREFIXES.some(
     (prefix) => path === prefix || path.startsWith(`${prefix}/`),
   );
-  const isAuthPage = ["/login", "/register"].includes(path);
-  if (!isProtected && !isAuthPage) return undefined;
+  if (!isProtected) return undefined;
   const identity = await verifySessionToken(
     request.cookies.get(SESSION_COOKIE)?.value ?? "",
     process.env.AUTH_SECRET ?? "",
   );
-  if (!identity && isProtected) {
+  if (!identity) {
     const target = new URL("/login", request.url);
     target.searchParams.set("next", path);
     return NextResponse.redirect(target);
   }
-  if (identity && isAuthPage)
-    return NextResponse.redirect(new URL("/map", request.url));
   return undefined;
 }
