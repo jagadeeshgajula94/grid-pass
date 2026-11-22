@@ -159,6 +159,33 @@ it("shows an empty search and safe error without exposing upstream details", asy
     "Connection unavailable",
   );
 });
+it("scrolls the active keyboard option into view without requiring a browser scroll API", async () => {
+  vi.useFakeTimers();
+  const places = Array.from({ length: 10 }, (_, index) => ({
+    ...destination,
+    id: `place-${index}`,
+    name: `Stop ${index + 1}`,
+  }));
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ places })));
+  render(<PlaceAutocomplete label="Destination" value="" onSelect={vi.fn()} />);
+  const input = screen.getByRole("combobox");
+  fireEvent.change(input, { target: { value: "Stops" } });
+  await act(() => vi.advanceTimersByTimeAsync(250));
+  const scroll = vi.fn();
+  for (const option of screen.getAllByRole("option"))
+    Object.defineProperty(option, "scrollIntoView", { value: scroll });
+  expect(scroll).not.toHaveBeenCalled();
+  for (let index = 0; index < places.length; index++)
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+  expect(scroll).toHaveBeenLastCalledWith({ block: "nearest" });
+  expect(scroll.mock.contexts.at(-1)).toBe(
+    screen.getByRole("option", { name: "Stop 10" }),
+  );
+  fireEvent.keyDown(input, { key: "ArrowUp" });
+  const active = screen.getByRole("option", { name: "Stop 9" });
+  expect(scroll.mock.contexts.at(-1)).toBe(active);
+  expect(input).toHaveAttribute("aria-activedescendant", active.id);
+});
 it("requests Nominatim only after explicit Enter or Search places, not typing", async () => {
   vi.useFakeTimers();
   const fetcher = mockPlanner();

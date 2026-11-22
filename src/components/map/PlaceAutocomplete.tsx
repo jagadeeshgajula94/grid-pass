@@ -1,4 +1,12 @@
-import { useId, useState, type ReactElement, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactElement,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import type { PlaceDto } from "../../domain/route";
 import { usePlaceSearch } from "./use-place-search";
 interface PlaceProps {
@@ -16,6 +24,18 @@ interface PlaceOptionsProps {
   onSelect: (place: PlaceDto) => void;
   onSearch: () => void;
 }
+function useActiveOption(
+  active: number,
+  places: PlaceDto[],
+): RefObject<HTMLUListElement | null> {
+  const list = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    const option = list.current?.children.item(active);
+    if (option instanceof HTMLElement)
+      option.scrollIntoView?.({ block: "nearest" });
+  }, [active, places]);
+  return list;
+}
 function PlaceOptions({
   id,
   label,
@@ -26,6 +46,7 @@ function PlaceOptions({
   onSelect,
   onSearch,
 }: PlaceOptionsProps): ReactElement {
+  const list = useActiveOption(active, places);
   return (
     <div className="place-options glass">
       {loading && (
@@ -38,6 +59,7 @@ function PlaceOptions({
         <p role="status">No places found. Try a nearby city.</p>
       )}
       <ul
+        ref={list}
         id={`${id}-places`}
         role="listbox"
         aria-label={`${label} suggestions`}
