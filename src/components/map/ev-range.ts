@@ -6,7 +6,13 @@ const RANGES = new Map<string, number>([
   ["BYD Atto 3", 420],
   ["Kia EV6", 450],
 ]);
-export function rangeContext(evModel: string, distanceKm?: number): string {
+export function rangeContext(
+  evModel: string,
+  distanceKm?: number,
+  fallback = false,
+): string {
+  if (fallback && distanceKm !== undefined)
+    return `Approximate straight-line ${Math.round(distanceKm)} km · Road distance unavailable · Plan charging conservatively`;
   const range = RANGES.get(evModel);
   if (!range)
     return "Plan a charge stop · Range varies with driving conditions";

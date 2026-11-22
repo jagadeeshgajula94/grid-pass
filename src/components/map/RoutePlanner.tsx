@@ -72,7 +72,11 @@ export function RoutePlanner(props: PlannerProps): ReactElement {
       <PlannerInputs {...props} />
       <PlannerActions {...props} />
       <p className="range-context">
-        {rangeContext(props.evModel, props.route?.totalDistanceKm)}
+        {rangeContext(
+          props.evModel,
+          props.route?.totalDistanceKm,
+          props.route?.fallback,
+        )}
       </p>
       {props.route && (
         <p className="route-summary">

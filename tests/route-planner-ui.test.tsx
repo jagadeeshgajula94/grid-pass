@@ -35,11 +35,15 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
-function mockPlanner(): ReturnType<typeof vi.fn<typeof fetch>> {
+function mockPlanner(fallback = false): ReturnType<typeof vi.fn<typeof fetch>> {
   const fetcher = vi.fn<typeof fetch>().mockImplementation(async (url) => {
     if (String(url).includes("geocode"))
       return Response.json({ places: [destination] });
-    if (String(url).includes("corridor")) return Response.json(corridorFixture);
+    if (String(url).includes("corridor"))
+      return Response.json({
+        ...corridorFixture,
+        route: { ...corridorFixture.route, fallback },
+      });
     return Response.json({
       stations: [plannerStation],
       center: { lat: 17.385, lng: 78.4867 },
@@ -189,4 +193,19 @@ it("explains estimated EV range", () => {
   expect(rangeContext("Tata Nexon EV", 275)).toContain("within your");
   expect(rangeContext("Kia EV6", 500)).toContain("plan a charge stop");
   expect(rangeContext("unknown")).toContain("Range varies");
+});
+it("never promises EV range when only fallback geometry is available", async () => {
+  mockPlanner(true);
+  render(<MapWorkspace firstName="Aarav" evModel="Tata Nexon EV" />);
+  await planTrip();
+  expect(
+    screen.getByText(/Approximate straight-line .*Road distance unavailable/),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/within your/)).toBeNull();
+  expect(rangeContext("unknown", 100, true)).toContain(
+    "Road distance unavailable",
+  );
+  expect(rangeContext("Tata Nexon EV", undefined, true)).not.toContain(
+    "within your",
+  );
 });
