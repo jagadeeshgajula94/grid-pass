@@ -36,6 +36,19 @@ function useActiveOption(
   }, [active, places]);
   return list;
 }
+function PlaceSearchButton({
+  onSearch,
+}: Pick<PlaceOptionsProps, "onSearch">): ReactElement {
+  return (
+    <button
+      type="button"
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={onSearch}
+    >
+      Search places
+    </button>
+  );
+}
 function PlaceOptions({
   id,
   label,
@@ -77,9 +90,7 @@ function PlaceOptions({
           </li>
         ))}
       </ul>
-      <button type="button" onClick={onSearch}>
-        Search places
-      </button>
+      <PlaceSearchButton onSearch={onSearch} />
     </div>
   );
 }

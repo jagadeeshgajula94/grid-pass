@@ -19,6 +19,8 @@ import {
   plannerStation,
 } from "./planner-ui-fixtures";
 const NEARBY_RING = "Nearby ring";
+const SEARCH_PLACES = "Search places";
+const EXPLICIT_SEARCH_MODE = "mode=search";
 vi.mock("next/dynamic", () => ({
   default:
     () =>
@@ -196,13 +198,31 @@ it("requests Nominatim only after explicit Enter or Search places, not typing", 
   expect(fetcher.mock.calls[0]?.[0]).toContain("mode=local");
   fireEvent.keyDown(input, { key: "Enter" });
   await act(() => vi.advanceTimersByTimeAsync(0));
-  expect(fetcher.mock.calls[1]?.[0]).toContain("mode=search");
-  fireEvent.click(screen.getByRole("button", { name: "Search places" }));
+  expect(fetcher.mock.calls[1]?.[0]).toContain(EXPLICIT_SEARCH_MODE);
+  fireEvent.click(screen.getByRole("button", { name: SEARCH_PLACES }));
   await act(() => vi.advanceTimersByTimeAsync(0));
-  expect(fetcher.mock.calls[2]?.[0]).toContain("mode=search");
+  expect(fetcher.mock.calls[2]?.[0]).toContain(EXPLICIT_SEARCH_MODE);
   fireEvent.change(input, { target: { value: "Other" } });
   await act(() => vi.advanceTimersByTimeAsync(250));
   expect(fetcher.mock.calls[3]?.[0]).toContain("mode=local");
+});
+it("cancels Search places mouse-down so Safari cannot blur the picker before click", async () => {
+  vi.useFakeTimers();
+  const fetcher = mockPlanner();
+  render(<PlaceAutocomplete label="Destination" value="" onSelect={vi.fn()} />);
+  const input = screen.getByRole("combobox");
+  act(() => input.focus());
+  fireEvent.change(input, { target: { value: "Vijay" } });
+  await act(() => vi.advanceTimersByTimeAsync(250));
+  expect(fireEvent.mouseDown(screen.getByRole("option"))).toBe(false);
+  const button = screen.getByRole("button", { name: SEARCH_PLACES });
+  expect(fireEvent.mouseDown(button)).toBe(false);
+  expect(document.activeElement).toBe(input);
+  fireEvent.click(button);
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  expect(fetcher.mock.calls.at(-1)?.[0]).toContain(EXPLICIT_SEARCH_MODE);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(input).toHaveAttribute("aria-expanded", "true");
 });
 it("ignores stale corridor completions and reports request failures", async () => {
   const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error("offline"));
