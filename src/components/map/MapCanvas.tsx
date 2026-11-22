@@ -21,6 +21,7 @@ import { updateRoute } from "./map-layers";
 import type { RouteSummaryDto } from "../../domain/route";
 import { CorridorMarkers } from "./CorridorMarkers";
 interface CanvasProps {
+  fitRequest?: number;
   sheetHeight?: number;
   corridor?: boolean;
   route?: RouteSummaryDto;
@@ -145,39 +146,82 @@ function visibleMapPadding(sheetHeight: number): PaddingOptions {
     bottom: sheetHeight + 24,
   };
 }
+interface OverviewState {
+  map: MapLibreMap;
+  intent: string;
+  layout: string;
+  selected: boolean;
+}
+function overviewLayout(sheetHeight = 150): string {
+  return JSON.stringify([
+    window.innerWidth,
+    window.innerHeight,
+    visibleMapPadding(sheetHeight),
+  ]);
+}
+function overviewState(map: MapLibreMap, props: CanvasProps): OverviewState {
+  return {
+    map,
+    intent: JSON.stringify([
+      props.center.lat,
+      props.center.lng,
+      props.corridor ?? false,
+      props.corridor ? props.route : null,
+      props.fitRequest ?? 0,
+    ]),
+    layout: overviewLayout(props.sheetHeight),
+    selected: !!props.selected,
+  };
+}
+function needsOverview(
+  previous: OverviewState | null,
+  next: OverviewState,
+): boolean {
+  return (
+    !next.selected &&
+    (!previous ||
+      previous.map !== next.map ||
+      previous.intent !== next.intent ||
+      previous.layout !== next.layout ||
+      previous.selected)
+  );
+}
+function fitOverview(map: MapLibreMap, props: CanvasProps): void {
+  const { center, corridor, route, sheetHeight } = props;
+  const box =
+    corridor && route
+      ? routeBounds(route.coordinates, 1)
+      : boundingBox(center.lat, center.lng, 5);
+  map.fitBounds(
+    [
+      [box.west, box.south],
+      [box.east, box.north],
+    ],
+    {
+      padding: visibleMapPadding(sheetHeight ?? 150),
+      duration: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+        ? 0
+        : 500,
+      maxZoom: corridor ? 13 : 14,
+    },
+  );
+}
 function useVisibleMap(map: MapLibreMap | null, props: CanvasProps): void {
-  const { center, route, corridor, selected, sheetHeight = 150 } = props;
-  const lastFit = useRef<{ map: MapLibreMap; key: string } | null>(null);
+  const previous = useRef<OverviewState | null>(null);
   useEffect(() => {
-    if (!map || selected) return;
-    const fit = (): void => {
-      const box =
-        corridor && route
-          ? routeBounds(route.coordinates, 1)
-          : boundingBox(center.lat, center.lng, 5);
-      const padding = visibleMapPadding(sheetHeight);
-      const key = JSON.stringify({ box, padding });
-      if (lastFit.current?.map === map && lastFit.current.key === key) return;
-      lastFit.current = { map, key };
-      map.fitBounds(
-        [
-          [box.west, box.south],
-          [box.east, box.north],
-        ],
-        {
-          padding,
-          duration: window.matchMedia?.("(prefers-reduced-motion: reduce)")
-            .matches
-            ? 0
-            : 500,
-          maxZoom: corridor ? 13 : 14,
-        },
-      );
+    if (!map) return;
+    const current = overviewState(map, props);
+    if (needsOverview(previous.current, current)) fitOverview(map, props);
+    previous.current = current;
+    const resize = (): void => {
+      const layout = overviewLayout(props.sheetHeight);
+      if (current.layout === layout) return;
+      current.layout = layout;
+      if (!current.selected) fitOverview(map, props);
     };
-    fit();
-    window.addEventListener("resize", fit);
-    return (): void => window.removeEventListener("resize", fit);
-  }, [map, center, route, corridor, selected, sheetHeight]);
+    window.addEventListener("resize", resize);
+    return (): void => window.removeEventListener("resize", resize);
+  }, [map, props]);
 }
 export function MapCanvas(props: CanvasProps): ReactElement {
   const {

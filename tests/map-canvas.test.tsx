@@ -302,6 +302,73 @@ it("refits phone padding changes without refitting equal measurements", () => {
   expect(state.fitBounds).toHaveBeenCalledOnce();
   vi.unstubAllGlobals();
 });
+it("refits explicit recenter requests at unchanged coordinates after a pan", () => {
+  vi.stubGlobal("innerWidth", 1440);
+  const props = {
+    center,
+    light: false,
+    stations: [],
+    selected: null,
+    onSelect: vi.fn(),
+  };
+  const { rerender } = render(<MapCanvas {...props} fitRequest={0} />);
+  state.fitBounds.mockClear();
+  emit("moveend");
+  rerender(<MapCanvas {...props} fitRequest={1} />);
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+  vi.unstubAllGlobals();
+});
+it.each([false, true])(
+  "restores desktop overview after station details close (corridor: %s)",
+  (corridor) => {
+    vi.stubGlobal("innerWidth", 1440);
+    const props = {
+      center,
+      light: false,
+      stations: [],
+      onSelect: vi.fn(),
+      corridor,
+      route: corridor ? corridorFixture.route : undefined,
+    };
+    const { rerender } = render(<MapCanvas {...props} selected={null} />);
+    rerender(<MapCanvas {...props} selected={station} />);
+    expect(state.flyTo).toHaveBeenCalledWith(
+      expect.objectContaining({ zoom: 15 }),
+    );
+    state.fitBounds.mockClear();
+    emit("moveend");
+    rerender(<MapCanvas {...props} selected={null} />);
+    expect(state.fitBounds).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  },
+);
+it("refits route endpoints when a desktop viewport narrows", () => {
+  vi.stubGlobal("innerWidth", 1440);
+  render(
+    <MapCanvas
+      center={center}
+      light={false}
+      stations={[]}
+      selected={null}
+      onSelect={vi.fn()}
+      corridor
+      route={corridorFixture.route}
+    />,
+  );
+  state.fitBounds.mockClear();
+  vi.stubGlobal("innerWidth", 1024);
+  fireEvent(window, new Event("resize"));
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+  expect(state.fitBounds).toHaveBeenLastCalledWith(
+    expect.any(Array),
+    expect.objectContaining({
+      padding: { left: 424, right: 80, top: 80, bottom: 40 },
+    }),
+  );
+  fireEvent(window, new Event("resize"));
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+  vi.unstubAllGlobals();
+});
 it("renders React pins, a center marker and radius; re-adds layers on style changes", () => {
   const onSelect = vi.fn();
   const { rerender, unmount } = render(

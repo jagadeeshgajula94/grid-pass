@@ -15,7 +15,10 @@ import { useStations } from "../src/components/map/use-stations";
 import type { StationDto } from "../src/domain/station";
 import { StrictMode } from "react";
 
-vi.mock("next/dynamic", () => ({ default: () => (): null => null }));
+const mapCanvas = vi.hoisted(() =>
+  vi.fn<(props: { fitRequest?: number }) => null>(() => null),
+);
+vi.mock("next/dynamic", () => ({ default: () => mapCanvas }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
@@ -23,6 +26,7 @@ const STATION_NAME = "City Charge";
 const FALLBACK_ORIGIN = "Hyderabad — location unavailable";
 const THEME_TOGGLE = "Toggle color theme";
 const SEARCH_PROMPT = "Search a place or route";
+const CURRENT_LOCATION = "Current location";
 const station: StationDto = {
   id: "one",
   name: STATION_NAME,
@@ -72,7 +76,7 @@ it("selects current position and ignores stale callbacks after preset changes", 
       coords: { latitude: 13, longitude: 80 },
     }),
   );
-  expect(result.current.location).toBe("Current location");
+  expect(result.current.location).toBe(CURRENT_LOCATION);
   act(() => result.current.locate());
   act(() => result.current.choose({ lat: 12, lng: 77 }, "Bengaluru"));
   act(() => getCurrentPosition.mock.calls[1]?.[1]());
@@ -152,6 +156,17 @@ it("hides covered phone controls at full snap and restores them on desktop", asy
   fireEvent(window, new Event("resize"));
   expect(screen.getByRole("button", { name: THEME_TOGGLE })).toBeVisible();
 });
+it("requests an overview when Current location resolves to the unchanged fallback", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(() => Promise.resolve(response())),
+  );
+  render(<MapWorkspace />);
+  await screen.findByText(STATION_NAME);
+  expect(mapCanvas.mock.lastCall?.[0]).toMatchObject({ fitRequest: 0 });
+  fireEvent.click(screen.getByRole("button", { name: CURRENT_LOCATION }));
+  expect(mapCanvas.mock.lastCall?.[0]).toMatchObject({ fitRequest: 1 });
+});
 it.each([false, true])(
   "sends one startup request after the fallback resolves (StrictMode: %s)",
   async (strict) => {
@@ -198,7 +213,7 @@ it.each(["success", "denied", "timeout"])(
     );
     fireEvent.click(screen.getByRole("button", { name: SEARCH_PROMPT }));
     expect(screen.getByRole("combobox", { name: "Origin" })).toHaveValue(
-      outcome === "success" ? "Current location" : FALLBACK_ORIGIN,
+      outcome === "success" ? CURRENT_LOCATION : FALLBACK_ORIGIN,
     );
   },
 );

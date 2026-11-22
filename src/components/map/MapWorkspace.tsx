@@ -31,6 +31,7 @@ const MapCanvas = dynamic(
   { ssr: false },
 );
 interface WorkspaceState {
+  fitRequest: number;
   search: ReturnType<typeof useLocation>;
   planner: Omit<PlannerProps, "evModel" | "route">;
   light: boolean;
@@ -59,9 +60,37 @@ function useSelection(
   }, [center, destination, bufferKm, filters]);
   return { selected, setSelected, close };
 }
+function requestFitAfter<Args extends unknown[]>(
+  action: (...args: Args) => void,
+  requestFit: () => void,
+): (...args: Args) => void {
+  return (...args): void => {
+    action(...args);
+    requestFit();
+  };
+}
+function usePlannerIntents(
+  search: ReturnType<typeof useLocation>,
+): Pick<WorkspaceState, "planner" | "fitRequest"> {
+  const [fitRequest, setFitRequest] = useState(0);
+  const requestFit = (): void => setFitRequest((request) => request + 1);
+  const planner = useRoutePlanner(search);
+  return {
+    fitRequest,
+    planner: {
+      ...planner,
+      onCurrent: requestFitAfter(planner.onCurrent, requestFit),
+      onOrigin: requestFitAfter(planner.onOrigin, requestFit),
+      onDestination: requestFitAfter(planner.onDestination, requestFit),
+      onBuffer: requestFitAfter(planner.onBuffer, requestFit),
+      onClear: requestFitAfter(planner.onClear, requestFit),
+      onSwap: requestFitAfter(planner.onSwap, requestFit),
+    },
+  };
+}
 function useWorkspace(): WorkspaceState {
   const search = useLocation();
-  const planner = useRoutePlanner(search);
+  const { planner, fitRequest } = usePlannerIntents(search);
   const [light, setLight] = useState(false);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const selection = useSelection(
@@ -92,6 +121,7 @@ function useWorkspace(): WorkspaceState {
   );
   return {
     search,
+    fitRequest,
     planner,
     light,
     setLight,
@@ -214,6 +244,7 @@ export function MapWorkspace({
   return (
     <main className="map-workspace">
       <MapCanvas
+        fitRequest={state.fitRequest}
         center={state.search.center}
         light={state.light}
         stations={state.filtered}
