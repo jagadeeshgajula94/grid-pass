@@ -131,7 +131,13 @@ export function AuthForm(props: AuthFormProps): ReactElement {
   return (
     <div className="form-content">
       <FormHeading isRegister={isRegister} />
-      <form ref={form} noValidate onSubmit={submit}>
+      <form
+        ref={form}
+        method="post"
+        action={`/api/auth/${props.mode}`}
+        noValidate
+        onSubmit={submit}
+      >
         <FormFields
           isRegister={isRegister}
           errors={errors}

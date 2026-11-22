@@ -46,6 +46,15 @@ it("renders inline strict validation errors on blur and submit", () => {
   fireEvent.click(screen.getByRole("button", { name: "Create account ↗" }));
   expect(screen.getByText("Choose your EV model")).toBeInTheDocument();
 });
+it.each(["login", "register"] as const)(
+  "uses native POST for %s when JavaScript is unavailable",
+  (mode) => {
+    render(<AuthForm mode={mode} />);
+    const form = screen.getByLabelText("Password").closest("form");
+    expect(form).toHaveAttribute("method", "post");
+    expect(form).toHaveAttribute("action", `/api/auth/${mode}`);
+  },
+);
 it("renders rule-driven strength meter", () => {
   const { rerender } = render(<PasswordStrength password="" />);
   expect(screen.getByRole("meter")).toHaveAttribute("value", "0");
