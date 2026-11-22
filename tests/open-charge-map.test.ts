@@ -38,42 +38,42 @@ it("does not fetch without a key", async () => {
   ).toEqual({ ok: true, value: [] });
   expect(fetcher).not.toHaveBeenCalled();
 });
-it("requests expanded OCM data and maps operator and operational metadata", async () => {
-  const payload = {
-    ID: 192362,
-    OperatorID: 3539,
-    OperatorInfo: { ID: 3539, Title: "Tata Power" },
-    AddressInfo: {
-      ID: 192721,
-      Title: "Tata Power - Hyderabad Central",
-      AddressLine1: "Punjagutta Road",
-      Town: "Hyderabad",
-      Latitude: center.lat,
-      Longitude: center.lng,
+const expandedPoi = {
+  ID: 192362,
+  OperatorID: 3539,
+  OperatorInfo: { ID: 3539, Title: "Tata Power" },
+  AddressInfo: {
+    ID: 192721,
+    Title: "Tata Power - Hyderabad Central",
+    AddressLine1: "Punjagutta Road",
+    Town: "Hyderabad",
+    Latitude: center.lat,
+    Longitude: center.lng,
+  },
+  Connections: [
+    {
+      ConnectionTypeID: 33,
+      PowerKW: 60,
+      StatusTypeID: 50,
+      StatusType: { ID: 50, Title: "Operational", IsOperational: true },
     },
-    Connections: [
-      {
-        ConnectionTypeID: 33,
-        PowerKW: 60,
-        StatusTypeID: 50,
-        StatusType: { ID: 50, Title: "Operational", IsOperational: true },
+    {
+      ConnectionTypeID: 25,
+      PowerKW: 22,
+      StatusTypeID: 30,
+      StatusType: {
+        ID: 30,
+        Title: "Temporarily Unavailable",
+        IsOperational: false,
       },
-      {
-        ConnectionTypeID: 25,
-        PowerKW: 22,
-        StatusTypeID: 30,
-        StatusType: {
-          ID: 30,
-          Title: "Temporarily Unavailable",
-          IsOperational: false,
-        },
-      },
-    ],
-    DateLastStatusUpdate: "2026-01-01T00:00:00Z",
-  };
+    },
+  ],
+  DateLastStatusUpdate: "2026-01-01T00:00:00Z",
+};
+it("requests expanded OCM data and maps operator and operational metadata", async () => {
   const fetcher = vi
     .fn<typeof fetch>()
-    .mockResolvedValue(Response.json([payload]));
+    .mockResolvedValue(Response.json([expandedPoi]));
   const result = await new HttpOpenChargeMapRepository(
     "key",
     fetcher,

@@ -67,7 +67,7 @@ it("classifies an AbortError as expected cancellation", async () => {
   expect(
     await fetchStations(center, new AbortController().signal),
   ).toMatchObject({
-    ok: false,
-    error: { code: "ABORTED", message: "Station request canceled." },
+    ok: true,
+    value: null,
   });
 });

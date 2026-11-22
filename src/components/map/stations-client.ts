@@ -35,7 +35,7 @@ function failure(code: ErrorCode, message: string): Result<never, AppError> {
 export async function fetchStations(
   center: Point,
   signal: AbortSignal,
-): Promise<Result<StationDto[], AppError>> {
+): Promise<Result<StationDto[] | null, AppError>> {
   try {
     const query = new URLSearchParams({
       lat: String(center.lat),
@@ -61,9 +61,10 @@ export async function fetchStations(
   } catch (error: unknown) {
     if (
       signal.aborted ||
-      (error instanceof Error && error.name === "AbortError")
+      ((error instanceof Error || error instanceof DOMException) &&
+        error.name === "AbortError")
     )
-      return failure("ABORTED", "Station request canceled.");
+      return { ok: true, value: null };
     return error instanceof SyntaxError
       ? failure("VALIDATION", "Station data unavailable.")
       : failure(

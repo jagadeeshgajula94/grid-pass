@@ -19,9 +19,10 @@ vi.mock("next/dynamic", () => ({ default: () => (): null => null }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
+const STATION_NAME = "City Charge";
 const station: StationDto = {
   id: "one",
-  name: "City Charge",
+  name: STATION_NAME,
   network: "statiq",
   lat: 17.385,
   lng: 78.4867,
@@ -99,7 +100,7 @@ it("loads the workspace, selects stations, syncs themes and switches location", 
   );
   render(<MapWorkspace firstName="Aarav" />);
   expect(screen.getByText("Hello, Aarav")).toBeInTheDocument();
-  await screen.findByText("City Charge");
+  await screen.findByText(STATION_NAME);
   expect(screen.getByText("1 stations within 5 km")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Statiq/ }));
   expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -129,7 +130,7 @@ it.each([false, true])(
     vi.stubGlobal("fetch", fetcher);
     const workspace = <MapWorkspace firstName="Aarav" />;
     render(strict ? <StrictMode>{workspace}</StrictMode> : workspace);
-    await screen.findByText("City Charge");
+    await screen.findByText(STATION_NAME);
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0]?.[1].signal.aborted).toBe(false);
   },
@@ -159,7 +160,7 @@ it.each(["success", "denied", "timeout"])(
         callbacks?.[0]({ coords: { latitude: 13, longitude: 80 } });
       else callbacks?.[1]({ code: outcome === "denied" ? 1 : 3 });
     });
-    await screen.findByText("City Charge");
+    await screen.findByText(STATION_NAME);
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0]?.[0]).toContain(
       outcome === "success" ? "lat=13&lng=80" : "lat=17.385&lng=78.4867",

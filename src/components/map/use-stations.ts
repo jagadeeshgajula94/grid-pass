@@ -23,11 +23,8 @@ export function useStations({ lat, lng }: Point, enabled = true): StationState {
     void fetchStations({ lat, lng }, controller.signal).then((result) => {
       if (!controller.signal.aborted)
         setState({
-          stations: result.ok ? result.value : [],
-          error:
-            result.ok || result.error.code === "ABORTED"
-              ? ""
-              : result.error.message,
+          stations: result.ok ? (result.value ?? []) : [],
+          error: result.ok ? "" : result.error.message,
           loading: false,
         });
     });
