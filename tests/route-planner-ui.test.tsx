@@ -21,6 +21,8 @@ import {
 const NEARBY_RING = "Nearby ring";
 const SEARCH_PLACES = "Search places";
 const EXPLICIT_SEARCH_MODE = "mode=search";
+const ARIA_ACTIVE_DESCENDANT = "aria-activedescendant";
+const ARIA_EXPANDED = "aria-expanded";
 vi.mock("next/dynamic", () => ({
   default:
     () =>
@@ -134,13 +136,42 @@ it("debounces autocomplete, aborts obsolete requests and supports keyboard selec
   expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
   await act(() => vi.advanceTimersByTimeAsync(250));
   fireEvent.keyDown(input, { key: "ArrowDown" });
-  expect(input).toHaveAttribute("aria-activedescendant");
+  expect(input).toHaveAttribute(ARIA_ACTIVE_DESCENDANT);
   fireEvent.keyDown(input, { key: "Enter" });
   expect(onSelect).toHaveBeenCalledWith(destination);
-  expect(input).toHaveAttribute("aria-expanded", "false");
+  expect(input).toHaveAttribute(ARIA_EXPANDED, "false");
   unmount();
   expect(fetcher.mock.calls.at(-1)?.[1]?.signal?.aborted).toBe(true);
 });
+it.each([{ isComposing: true }, { keyCode: 229 }])(
+  "leaves IME composition keys untouched (%j)",
+  async (composition) => {
+    vi.useFakeTimers();
+    const fetcher = mockPlanner();
+    const onSelect = vi.fn();
+    render(
+      <PlaceAutocomplete label="Destination" value="" onSelect={onSelect} />,
+    );
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "Vijay" } });
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    expect(fireEvent.keyDown(input, { key: "Enter", ...composition })).toBe(
+      true,
+    );
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(input, { key: "ArrowDown", ...composition });
+    expect(input).not.toHaveAttribute(ARIA_ACTIVE_DESCENDANT);
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "Enter", ...composition });
+    expect(onSelect).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: "Escape", ...composition });
+    expect(input).toHaveAttribute(ARIA_EXPANDED, "true");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onSelect).toHaveBeenCalledWith(destination);
+    expect(input).toHaveAttribute(ARIA_EXPANDED, "false");
+  },
+);
 it("shows an empty search and safe error without exposing upstream details", async () => {
   vi.stubGlobal(
     "fetch",
@@ -186,7 +217,7 @@ it("scrolls the active keyboard option into view without requiring a browser scr
   fireEvent.keyDown(input, { key: "ArrowUp" });
   const active = screen.getByRole("option", { name: "Stop 9" });
   expect(scroll.mock.contexts.at(-1)).toBe(active);
-  expect(input).toHaveAttribute("aria-activedescendant", active.id);
+  expect(input).toHaveAttribute(ARIA_ACTIVE_DESCENDANT, active.id);
 });
 it("requests Nominatim only after explicit Enter or Search places, not typing", async () => {
   vi.useFakeTimers();
@@ -222,7 +253,7 @@ it("cancels Search places mouse-down so Safari cannot blur the picker before cli
   await act(() => vi.advanceTimersByTimeAsync(0));
   expect(fetcher.mock.calls.at(-1)?.[0]).toContain(EXPLICIT_SEARCH_MODE);
   expect(fetcher).toHaveBeenCalledTimes(2);
-  expect(input).toHaveAttribute("aria-expanded", "true");
+  expect(input).toHaveAttribute(ARIA_EXPANDED, "true");
 });
 it("ignores stale corridor completions and reports request failures", async () => {
   const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error("offline"));
