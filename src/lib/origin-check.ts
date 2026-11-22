@@ -10,11 +10,9 @@ const originSchema = z
 const hostnameSchema = z.union([z.hostname(), z.ipv4()]);
 const ipv6Schema = z.ipv6();
 function isHost(value: string): boolean {
+  if (/[/?#@\\\s]/.test(value) || value.endsWith(":")) return false;
   try {
     const parsed = new URL(`http://${value}`);
-    const defaultPort = !parsed.port && value.endsWith(":80") ? ":80" : "";
-    const canonical = parsed.host + defaultPort;
-    if (canonical !== value.toLowerCase()) return false;
     return parsed.hostname.startsWith("[")
       ? ipv6Schema.safeParse(parsed.hostname.slice(1, -1)).success
       : hostnameSchema.safeParse(parsed.hostname).success;
@@ -27,7 +25,7 @@ const hostSchema = z
   .min(1)
   .max(259)
   .refine(isHost)
-  .toLowerCase()
+  .transform((value) => new URL(`http://${value}`).host)
   .optional();
 export function hasTrustedOrigin(
   request: NextRequest,

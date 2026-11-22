@@ -67,6 +67,24 @@ it.each(["other.example:3000", "[::1]:3000", "localhost"])(
     ).toBe(true);
   },
 );
+it("normalizes expanded IPv6 Host addresses before comparing with Origin", () => {
+  const origin = "https://[2001:db8::1]:3000";
+  const host = "[2001:0db8:0000:0000:0000:0000:0000:0001]:3000";
+  expect(
+    hasTrustedOrigin(
+      new NextRequest(BASE, { headers: { origin, host } }),
+      BASE,
+    ),
+  ).toBe(true);
+  expect(
+    hasTrustedOrigin(
+      new NextRequest(BASE, {
+        headers: { origin, host: host.replace(":3000", ":3001") },
+      }),
+      BASE,
+    ),
+  ).toBe(false);
+});
 it.each(["not-an-ip", "999.1.1.1", "192.168.1", "::gg", "x".repeat(2049)])(
   "rejects invalid forwarded IP %s",
   (value) => {
