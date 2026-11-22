@@ -232,6 +232,76 @@ it("fits above the measured phone sheet and updates padding on resize", () => {
   );
   vi.unstubAllGlobals();
 });
+it.each([false, true])(
+  "preserves the desktop camera on sheet measurements (corridor: %s)",
+  (corridor) => {
+    vi.stubGlobal("innerWidth", 1440);
+    const props = {
+      center,
+      light: false,
+      stations: [],
+      selected: null,
+      onSelect: vi.fn(),
+      corridor,
+      route: corridor ? corridorFixture.route : undefined,
+    };
+    const { rerender } = render(<MapCanvas {...props} sheetHeight={650} />);
+    state.fitBounds.mockClear();
+    emit("moveend");
+    for (const sheetHeight of [150, 650]) {
+      rerender(
+        <MapCanvas
+          {...props}
+          center={{ ...center }}
+          route={props.route ? { ...props.route } : undefined}
+          sheetHeight={sheetHeight}
+        />,
+      );
+      expect(state.fitBounds).not.toHaveBeenCalled();
+    }
+    fireEvent(window, new Event("resize"));
+    expect(state.fitBounds).not.toHaveBeenCalled();
+    const destination = { lat: 18, lng: 82 };
+    rerender(
+      <MapCanvas
+        {...props}
+        center={destination}
+        route={
+          corridor
+            ? { ...corridorFixture.route, coordinates: [center, destination] }
+            : undefined
+        }
+        sheetHeight={650}
+      />,
+    );
+    expect(state.fitBounds).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  },
+);
+it("refits phone padding changes without refitting equal measurements", () => {
+  vi.stubGlobal("innerWidth", 390);
+  vi.stubGlobal("innerHeight", 844);
+  const props = {
+    center,
+    light: false,
+    stations: [],
+    selected: null,
+    onSelect: vi.fn(),
+  };
+  const { rerender } = render(<MapCanvas {...props} sheetHeight={150} />);
+  state.fitBounds.mockClear();
+  rerender(<MapCanvas {...props} sheetHeight={422} />);
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+  expect(state.fitBounds).toHaveBeenLastCalledWith(
+    expect.any(Array),
+    expect.objectContaining({
+      padding: expect.objectContaining({ bottom: 446 }),
+    }),
+  );
+  rerender(<MapCanvas {...props} center={{ ...center }} sheetHeight={422} />);
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+  vi.unstubAllGlobals();
+});
 it("renders React pins, a center marker and radius; re-adds layers on style changes", () => {
   const onSelect = vi.fn();
   const { rerender, unmount } = render(

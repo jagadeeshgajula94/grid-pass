@@ -11,6 +11,7 @@ import {
   Marker,
   NavigationControl,
   setWorkerUrl,
+  type PaddingOptions,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { StationDto } from "../../domain/station";
@@ -134,34 +135,37 @@ function useMapView(
       });
   }, [map, selected, route, corridor]);
 }
+function visibleMapPadding(sheetHeight: number): PaddingOptions {
+  if (window.innerWidth >= 768)
+    return { left: 424, right: 80, top: 80, bottom: 40 };
+  return {
+    left: 48,
+    right: 96,
+    top: Math.min(100, Math.max(24, (window.innerHeight - sheetHeight) * 0.2)),
+    bottom: sheetHeight + 24,
+  };
+}
 function useVisibleMap(map: MapLibreMap | null, props: CanvasProps): void {
   const { center, route, corridor, selected, sheetHeight = 150 } = props;
+  const lastFit = useRef<{ map: MapLibreMap; key: string } | null>(null);
   useEffect(() => {
     if (!map || selected) return;
     const fit = (): void => {
-      const desktop = window.innerWidth >= 768;
       const box =
         corridor && route
           ? routeBounds(route.coordinates, 1)
           : boundingBox(center.lat, center.lng, 5);
-      const bottom = desktop ? 40 : sheetHeight + 24;
+      const padding = visibleMapPadding(sheetHeight);
+      const key = JSON.stringify({ box, padding });
+      if (lastFit.current?.map === map && lastFit.current.key === key) return;
+      lastFit.current = { map, key };
       map.fitBounds(
         [
           [box.west, box.south],
           [box.east, box.north],
         ],
         {
-          padding: {
-            left: desktop ? 424 : 48,
-            right: desktop ? 80 : 96,
-            top: desktop
-              ? 80
-              : Math.min(
-                  100,
-                  Math.max(24, (window.innerHeight - sheetHeight) * 0.2),
-                ),
-            bottom,
-          },
+          padding,
           duration: window.matchMedia?.("(prefers-reduced-motion: reduce)")
             .matches
             ? 0
