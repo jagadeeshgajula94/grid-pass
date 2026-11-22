@@ -1,14 +1,17 @@
+import { z } from "./zod";
+
+const returnPathSchema = z
+  .string()
+  .min(1)
+  .max(2048)
+  .regex(/^\/(?!\/)[^\s\\]*$/)
+  .refine((value) => !/[\u0000-\u001f\u007f]/.test(value));
+
 export function safeNext(value: unknown): string {
-  if (
-    typeof value !== "string" ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    /[\\\s]/.test(value) ||
-    /[\u0000-\u001f]/.test(value)
-  )
-    return "/map";
+  const result = returnPathSchema.safeParse(value);
+  if (!result.success) return "/map";
   try {
-    const parsed = new URL(value, "https://gridpass.invalid");
+    const parsed = new URL(result.data, "https://gridpass.invalid");
     return parsed.origin === "https://gridpass.invalid"
       ? `${parsed.pathname}${parsed.search}${parsed.hash}`
       : "/map";

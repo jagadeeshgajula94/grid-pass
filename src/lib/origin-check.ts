@@ -1,20 +1,45 @@
 import type { NextRequest } from "next/server";
+import { z } from "./zod";
+
+const originSchema = z
+  .string()
+  .min(1)
+  .max(2048)
+  .pipe(z.url({ protocol: /^https?$/ }))
+  .pipe(z.string().refine((value) => new URL(value).origin === value));
+const hostnameSchema = z.union([z.hostname(), z.ipv4()]);
+const ipv6Schema = z.ipv6();
+function isHost(value: string): boolean {
+  try {
+    const parsed = new URL(`http://${value}`);
+    const defaultPort = !parsed.port && value.endsWith(":80") ? ":80" : "";
+    const canonical = parsed.host + defaultPort;
+    if (canonical !== value.toLowerCase()) return false;
+    return parsed.hostname.startsWith("[")
+      ? ipv6Schema.safeParse(parsed.hostname.slice(1, -1)).success
+      : hostnameSchema.safeParse(parsed.hostname).success;
+  } catch {
+    return false;
+  }
+}
+const hostSchema = z
+  .string()
+  .min(1)
+  .max(259)
+  .refine(isHost)
+  .toLowerCase()
+  .optional();
 export function hasTrustedOrigin(
   request: NextRequest,
   appUrl: string,
 ): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) return false;
+  const origin = originSchema.safeParse(request.headers.get("origin"));
+  const host = hostSchema.safeParse(request.headers.get("host") ?? undefined);
+  if (!origin.success || !host.success) return false;
   try {
-    const parsed = new URL(origin);
-    if (
-      parsed.origin !== origin ||
-      !["http:", "https:"].includes(parsed.protocol)
-    )
-      return false;
+    const parsed = new URL(origin.data);
     return (
-      parsed.origin === new URL(appUrl).origin ||
-      parsed.host === request.headers.get("host")
+      parsed.origin === new URL(appUrl).origin || parsed.host === host.data
     );
   } catch {
     return false;
