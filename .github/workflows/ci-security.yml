@@ -21,6 +21,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Generate ephemeral authentication secret
+        run: echo "AUTH_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run format:check

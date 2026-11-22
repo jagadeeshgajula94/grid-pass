@@ -1,29 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { RateLimiter } from "./lib/rate-limit";
+import { checkApi, checkPage } from "./lib/middleware-security";
 
-const apiLimiter = new RateLimiter();
-
-function limitApiRequest(request: NextRequest): NextResponse | undefined {
-  if (!request.nextUrl.pathname.startsWith("/api/")) return undefined;
-  const client = (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip")?.trim() ||
-    "unknown"
-  ).slice(0, 128);
-  const result = apiLimiter.consume(client);
-  if (result.isAllowed) return undefined;
-  return NextResponse.json(
-    { error: "Too many requests" },
-    { status: 429, headers: { "Retry-After": String(result.retryAfter) } },
-  );
-}
-
-export function middleware(request: NextRequest): NextResponse {
+export async function middleware(request: NextRequest): Promise<NextResponse> {
   const nonce = btoa(crypto.randomUUID());
   const policy = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
-    `style-src 'self' 'nonce-${nonce}'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
+    process.env.NODE_ENV === "development"
+      ? "style-src 'self' 'unsafe-inline'"
+      : `style-src 'self' 'nonce-${nonce}'`,
     "img-src 'self' data:",
     "font-src 'self'",
     "connect-src 'self'",
@@ -36,7 +21,9 @@ export function middleware(request: NextRequest): NextResponse {
   headers.set("x-nonce", nonce);
   headers.set("Content-Security-Policy", policy);
   const response =
-    limitApiRequest(request) ?? NextResponse.next({ request: { headers } });
+    checkApi(request) ??
+    (await checkPage(request)) ??
+    NextResponse.next({ request: { headers } });
   response.headers.set("Content-Security-Policy", policy);
   response.headers.set("Cache-Control", "no-store");
   return response;

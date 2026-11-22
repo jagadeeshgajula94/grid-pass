@@ -2,8 +2,12 @@ import { describe, expect, it } from "vitest";
 import { validateEnvironment } from "../src/lib/env";
 
 describe("startup environment", () => {
-  it("supplies non-secret defaults for an empty environment", () => {
-    expect(validateEnvironment({})).toEqual({
+  it("supplies defaults while requiring a signing secret", () => {
+    expect(() => validateEnvironment({})).toThrow("AUTH_SECRET");
+    expect(
+      validateEnvironment({ AUTH_SECRET: process.env.AUTH_SECRET }),
+    ).toEqual({
+      AUTH_SECRET: process.env.AUTH_SECRET,
       NODE_ENV: "development",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
     });
@@ -11,6 +15,7 @@ describe("startup environment", () => {
   it("accepts a configured production origin", () => {
     expect(
       validateEnvironment({
+        AUTH_SECRET: process.env.AUTH_SECRET,
         NODE_ENV: "production",
         NEXT_PUBLIC_APP_URL: "https://example.com",
       }).NODE_ENV,
@@ -18,10 +23,16 @@ describe("startup environment", () => {
   });
   it("rejects invalid values without revealing them", () => {
     expect(() =>
-      validateEnvironment({ NEXT_PUBLIC_APP_URL: "sensitive-invalid-value" }),
+      validateEnvironment({
+        AUTH_SECRET: process.env.AUTH_SECRET,
+        NEXT_PUBLIC_APP_URL: "sensitive-invalid-value",
+      }),
     ).toThrow("Invalid environment variables: NEXT_PUBLIC_APP_URL");
-    expect(() => validateEnvironment({ NODE_ENV: "invalid" })).toThrow(
-      "Invalid environment variables: NODE_ENV",
-    );
+    expect(() =>
+      validateEnvironment({
+        AUTH_SECRET: process.env.AUTH_SECRET,
+        NODE_ENV: "invalid",
+      }),
+    ).toThrow("Invalid environment variables: NODE_ENV");
   });
 });
