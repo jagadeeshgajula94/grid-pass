@@ -1,5 +1,9 @@
 export type ErrorCode =
-  "VALIDATION" | "EMAIL_TAKEN" | "INVALID_CREDENTIALS" | "UNAUTHENTICATED";
+  | "VALIDATION"
+  | "EMAIL_TAKEN"
+  | "INVALID_CREDENTIALS"
+  | "UNAUTHENTICATED"
+  | "UPSTREAM_UNAVAILABLE";
 
 export class AppError extends Error {
   constructor(

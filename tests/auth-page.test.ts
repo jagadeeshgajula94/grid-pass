@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import LoginPage from "../src/app/login/page";
 import RegisterPage from "../src/app/register/page";
+import MapPage from "../src/app/map/page";
 import { login } from "../src/services/auth.service";
 import { resetMockStore } from "../src/db/mock-store";
 import { verifySessionToken } from "../src/services/session-token";
@@ -28,9 +29,9 @@ beforeEach(async () => {
   await resetMockStore();
 });
 
-async function authenticate(): Promise<void> {
+async function authenticate(email = "aarav@example.com"): Promise<void> {
   const result = await login({
-    email: "aarav@example.com",
+    email,
     password: env.MOCK_USER_PASSWORD ?? "",
   });
   if (!result.ok) throw result.error;
@@ -43,6 +44,16 @@ it.each(pages)(
     await expect(page()).rejects.toThrow("redirect:/map");
   },
 );
+it("protects the map page and passes only the first name to the workspace", async () => {
+  await expect(MapPage()).rejects.toThrow("redirect:/login");
+  for (const [email, firstName] of [
+    ["aarav@example.com", "Aarav"],
+    ["priya@example.com", "Priya"],
+  ] as const) {
+    await authenticate(email);
+    expect((await MapPage()).props).toEqual({ firstName });
+  }
+});
 it("renders both auth pages after store loss despite a valid signed JWT", async () => {
   await authenticate();
   await resetMockStore();
