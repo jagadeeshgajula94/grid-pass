@@ -80,6 +80,9 @@
   display: grid;
   gap: 10px;
 }
+.map-controls[hidden] {
+  display: none;
+}
 .map-controls .theme-toggle {
   font-size: 0;
   margin: 0;

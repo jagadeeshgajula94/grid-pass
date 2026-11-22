@@ -230,6 +230,7 @@ export function MapWorkspace({
         firstName={firstName}
         onTheme={state.setLight}
         onRecenter={state.planner.onCurrent}
+        fullSheet={sheet.snap === "full"}
       />
       <BottomSheet sheet={sheet} onHeight={setSheetHeight}>
         <WorkspaceContent state={state} evModel={evModel} sheet={sheet} />
