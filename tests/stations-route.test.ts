@@ -17,8 +17,12 @@ async function cookie(): Promise<string> {
   return response.headers.get("set-cookie")?.split(";")[0] ?? "";
 }
 afterEach(() => vi.restoreAllMocks());
-it("requires authentication", async () => {
-  expect((await GET(new Request(BASE))).status).toBe(401);
+it("allows nearby discovery without a session", async () => {
+  const response = await GET(new Request(`${BASE}?lat=17.385&lng=78.4867`));
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as NearbyStations;
+  expect(body.radiusKm).toBe(5);
+  expect(body.stations.length).toBeGreaterThan(0);
 });
 it("rejects bad latitude and duplicate parameters", async () => {
   const headers = { cookie: await cookie() };

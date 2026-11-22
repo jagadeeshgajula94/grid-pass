@@ -14,7 +14,7 @@ export function SignOutButton(): ReactElement {
         setError("Unable to sign out. Please retry.");
         return;
       }
-      router.replace("/login");
+      router.replace("/map");
       router.refresh();
     } catch {
       setError("Connection unavailable. Please retry.");

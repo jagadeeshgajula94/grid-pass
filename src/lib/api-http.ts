@@ -14,19 +14,12 @@ export function invalidRequest(error?: z.ZodError): NextResponse {
     { status: 400, headers: PRIVATE_HEADERS },
   );
 }
-export async function authenticatedApi(
-  request: Request,
+export async function publicApi(
   event: string,
   handle: (requestId: string) => Promise<NextResponse>,
 ): Promise<NextResponse> {
   const requestId = crypto.randomUUID();
   try {
-    const user = await getCurrentUser(requestToken(request));
-    if (!user.ok)
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401, headers: PRIVATE_HEADERS },
-      );
     const response = await handle(requestId);
     logEvent("info", event, requestId, { status: response.status });
     return response;
@@ -37,4 +30,19 @@ export async function authenticatedApi(
       { status: 500, headers: PRIVATE_HEADERS },
     );
   }
+}
+export function authenticatedApi(
+  request: Request,
+  event: string,
+  handle: (requestId: string) => Promise<NextResponse>,
+): Promise<NextResponse> {
+  return publicApi(event, async (requestId) => {
+    const user = await getCurrentUser(requestToken(request));
+    if (!user.ok)
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401, headers: PRIVATE_HEADERS },
+      );
+    return handle(requestId);
+  });
 }

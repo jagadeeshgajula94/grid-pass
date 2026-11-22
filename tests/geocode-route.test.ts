@@ -15,8 +15,23 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
-it("requires authentication", async () => {
-  expect((await GET(new Request(`${BASE}?q=Vijay`))).status).toBe(401);
+it("allows local autocomplete without a session", async () => {
+  const response = await GET(new Request(`${BASE}?q=Vijay`));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    places: [{ name: "Vijayawada" }],
+  });
+});
+it("allows explicit upstream search without a session", async () => {
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json([]));
+  const geocode = new GeocodeService(new NominatimGeocodeRepository(fetcher));
+  vi.spyOn(service, "searchPlaces").mockImplementation(
+    (query, requestId, mode) => geocode.search(query, requestId, mode),
+  );
+  const response = await GET(new Request(`${BASE}?q=Unknownplace&mode=search`));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ places: [] });
+  expect(fetcher).toHaveBeenCalledTimes(1);
 });
 it("rejects invalid query, unknown and duplicate parameters", async () => {
   const headers = { cookie: await plannerCookie() };

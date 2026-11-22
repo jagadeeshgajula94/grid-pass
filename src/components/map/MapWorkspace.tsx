@@ -105,7 +105,7 @@ export function MapWorkspace({
   firstName,
   evModel = "",
 }: {
-  firstName: string;
+  firstName?: string;
   evModel?: string;
 }): ReactElement {
   const state = useWorkspace();

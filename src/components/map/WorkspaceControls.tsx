@@ -1,4 +1,5 @@
 import type { ReactElement } from "react";
+import Link from "next/link";
 import { ThemeToggle } from "../auth/ThemeToggle";
 import { SignOutButton } from "../auth/SignOutButton";
 import { FilterBar } from "./FilterBar";
@@ -7,7 +8,7 @@ export function WorkspaceHeader({
   firstName,
   onTheme,
 }: {
-  firstName: string;
+  firstName?: string;
   onTheme: (light: boolean) => void;
 }): ReactElement {
   return (
@@ -17,10 +18,16 @@ export function WorkspaceHeader({
           GRID<span>PASS</span>
           <small>CHARGE ANYWHERE</small>
         </a>
-        <span className="map-greeting">Hello, {firstName}</span>
+        {firstName && <span className="map-greeting">Hello, {firstName}</span>}
       </div>
       <ThemeToggle onChange={onTheme} />
-      <SignOutButton />
+      {firstName ? (
+        <SignOutButton />
+      ) : (
+        <Link className="primary-button" href="/login">
+          Sign in
+        </Link>
+      )}
     </header>
   );
 }

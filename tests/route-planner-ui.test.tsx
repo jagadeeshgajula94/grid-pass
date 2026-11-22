@@ -23,6 +23,7 @@ const SEARCH_PLACES = "Search places";
 const EXPLICIT_SEARCH_MODE = "mode=search";
 const ARIA_ACTIVE_DESCENDANT = "aria-activedescendant";
 const ARIA_EXPANDED = "aria-expanded";
+const GUEST_RANGE = "Sign in to see range for your EV";
 vi.mock("next/dynamic", () => ({
   default:
     () =>
@@ -72,6 +73,9 @@ it("switches to numbered corridor cards, opens the drawer, filters and clears ba
   mockPlanner();
   render(<MapWorkspace firstName="Aarav" evModel="Tata Nexon EV" />);
   await screen.findByText(plannerStation.name);
+  expect(screen.getByText("Hello, Aarav")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
   expect(screen.getByLabelText(NEARBY_RING)).toBeInTheDocument();
   await planTrip();
   expect(screen.queryByLabelText(NEARBY_RING)).toBeNull();
@@ -267,10 +271,29 @@ it("ignores stale corridor completions and reports request failures", async () =
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(result.current.error).toContain("Connection unavailable");
 });
+it("lets guests browse stations, open the drawer and plan a route with neutral EV copy", async () => {
+  mockPlanner();
+  render(<MapWorkspace />);
+  await screen.findByText(plannerStation.name);
+  expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    "href",
+    "/login",
+  );
+  expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
+  expect(screen.queryByText(/Hello,/)).toBeNull();
+  expect(screen.getByText(GUEST_RANGE)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Highway Charge/ }));
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  fireEvent.keyDown(window, { key: "Escape" });
+  await planTrip();
+  expect(screen.getByText(GUEST_RANGE)).toBeInTheDocument();
+  expect(screen.queryByLabelText(NEARBY_RING)).toBeNull();
+});
 it("explains estimated EV range", () => {
   expect(rangeContext("Tata Nexon EV", 275)).toContain("within your");
   expect(rangeContext("Kia EV6", 500)).toContain("plan a charge stop");
   expect(rangeContext("unknown")).toContain("Range varies");
+  expect(rangeContext("", 100, true)).toBe(GUEST_RANGE);
 });
 it("never promises EV range when only fallback geometry is available", async () => {
   mockPlanner(true);

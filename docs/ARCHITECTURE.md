@@ -2,7 +2,7 @@
 
 ## Corridor and geocoding server boundary
 
-Authenticated geocode and corridor endpoints delegate strict validated inputs to
+Public geocode and corridor endpoints delegate strict validated inputs to
 services and typed repositories. The shared upstream fetcher permits only HTTPS
 on exact Nominatim, OSRM, and OCM hostnames, rejects credentials, nondefault ports
 and redirects, bounds streamed JSON to two MiB, and applies abort timeouts.
@@ -27,7 +27,7 @@ and limits are process-local. Public provider availability, distributed throttli
 and ingress-controlled DNS/forwarded-IP trust remain deployment concerns. Browser
 CSP does not change because upstream access is server-only.
 
-Authenticated `GET /api/stations/nearby` validates strict allowlisted query parameters before delegating to the station service and typed repositories. Existing `/api/*` middleware rate limiting applies. Session cookies are read from request headers, never reconstructed as requests. Responses expose only station DTOs; error responses are generic and uncached, successful responses are private for 30 seconds.
+Public `GET /api/stations/nearby` validates strict allowlisted query parameters before delegating to the station service and typed repositories. Existing `/api/*` middleware rate limiting applies without requiring a session. Responses expose only station DTOs; error responses are generic and uncached, successful responses are private for 30 seconds.
 
 The OCM repository is the only external station egress: HTTPS `api.openchargemap.io/v3/poi`, constant host verification, redirects rejected, a three-second abort signal, and a streamed two-MiB response bound. The optional server-only API key is sent only as `X-API-Key`. Zod validates upstream fields, removes control characters and limits text lengths; markup remains plain text and must never be rendered as HTML. Unknown connector types are dropped; unknown tariffs are null. Operational OCM connectors indicate availability only approximately, not live occupancy.
 
@@ -35,7 +35,21 @@ The bounded process-local cache holds merged unfiltered public candidates for fi
 
 CSP allows only `https://basemaps.cartocdn.com` and `https://tiles.basemaps.cartocdn.com` for map image/network requests, with data/blob images and self/blob workers (blob child fallback). Production script/style policies remain nonce-based. OCM is never contacted directly by browsers.
 
-The map workspace fetches only the authenticated same-origin stations endpoint and validates the response with jitless Zod. Location changes abort previous requests; filters operate on validated client data. Geolocation is optional and denied/unavailable requests fall back to Hyderabad. No location is persisted. Station details, network markers and clusters are React text/components rendered through portals, never HTML popups. External navigation URLs contain only validated numeric coordinates.
+The map workspace fetches the public same-origin discovery endpoints and validates responses with jitless Zod. Location changes abort previous requests; filters operate on validated client data. Geolocation is optional and denied/unavailable requests fall back to Hyderabad. No location is persisted. Station details, network markers and clusters are React text/components rendered through portals, never HTML popups. External navigation URLs contain only validated numeric coordinates.
+
+`/` redirects to public `/map`. Browsing, station details, local autocomplete,
+explicit geocoding and corridor planning require no account. Middleware retains
+all API rate limits, nonce CSP and the exact trusted-Origin check for POST,
+including public corridor requests. There are no protected page prefixes.
+The map server component optionally resolves an active session to personalize the
+header and registered-EV range context; invalid, expired or revoked sessions render
+the guest experience. Guests see Sign in and neutral EV copy. Authentication and
+logout return to `/map`; auth/me still requires an active session.
+
+Public discovery does not authorize charging or payment. `authenticatedApi` in
+`src/lib/api-http.ts` remains a tested, fail-closed active-session seam for future
+Start charging endpoints; their services must additionally authorize the charging
+resource and payment operation. No charging endpoint or UI is implemented here.
 
 MapLibre 6 uses a separately bundled same-origin module worker, configured with `setWorkerUrl` and a static `new URL` asset reference. No custom worker scripts, RTL plugins, eval-based application code, or relaxed production CSP are needed. Map styles, glyphs, sprites and vector tiles come from the two allowlisted CARTO origins. Supercluster runs locally on the filtered dataset. Theme changes reload the map style and restore the radius layers.
 
@@ -89,13 +103,13 @@ redacted JSON; no credentials or sensitive bodies are logged.
 
 ## Accepted ADRs (V1)
 
-| ADR | Decision and trade-off                                                                                                                                                                                                                                                                                                                                   |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 001 | Mock repository behind typed interfaces rather than an ORM now. V2 replaces repository implementations with a real DB, adding migrations, transactions and durability without changing service contracts.                                                                                                                                                |
-| 002 | Argon2id, 19,456 KiB memory, two iterations, one lane. Unknown-email login verifies a precomputed dummy hash with the same cost. Hashing costs CPU; ingress limits remain essential.                                                                                                                                                                     |
-| 003 | jose HS256 signed JWT with required issuer, audience, expiry, subject and fresh session ID, plus a server-side seven-day session record. Rotate every authentication; revoke on logout. Cookie is HttpOnly, SameSite=Lax, Path=/, Secure in production. Middleware verifies signatures only; services also require the active record and matching owner. |
-| 004 | Origin-check CSRF on all mutating API methods: require a canonical HTTP(S) Origin equal to NEXT_PUBLIC_APP_URL. Caller-supplied Host is validated but cannot grant trust, including across schemes. SameSite is defense in depth. Configure the exact HTTPS production origin.                                                                           |
-| 005 | In-memory sliding-window log for authentication: five POST attempts per 15 minutes, separate login/register buckets, bounded keys and 10,000-client map; fail closed at capacity. Existing fixed-window 60/min API limiter is retained. Durable/distributed limiting deferred.                                                                           |
+| ADR | Decision and trade-off                                                                                                                                                                                                                                                                                                                                           |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 001 | Mock repository behind typed interfaces rather than an ORM now. V2 replaces repository implementations with a real DB, adding migrations, transactions and durability without changing service contracts.                                                                                                                                                        |
+| 002 | Argon2id, 19,456 KiB memory, two iterations, one lane. Unknown-email login verifies a precomputed dummy hash with the same cost. Hashing costs CPU; ingress limits remain essential.                                                                                                                                                                             |
+| 003 | jose HS256 signed JWT with required issuer, audience, expiry, subject and fresh session ID, plus a server-side seven-day session record. Rotate every authentication; revoke on logout. Cookie is HttpOnly, SameSite=Lax, Path=/, Secure in production. Authenticated actions require the active record and matching owner in services; map discovery is public. |
+| 004 | Origin-check CSRF on all mutating API methods: require a canonical HTTP(S) Origin equal to NEXT_PUBLIC_APP_URL. Caller-supplied Host is validated but cannot grant trust, including across schemes. SameSite is defense in depth. Configure the exact HTTPS production origin.                                                                                   |
+| 005 | In-memory sliding-window log for authentication: five POST attempts per 15 minutes, separate login/register buckets, bounded keys and 10,000-client map; fail closed at capacity. Existing fixed-window 60/min API limiter is retained. Durable/distributed limiting deferred.                                                                                   |
 
 Middleware replaces caller-supplied nonce headers with a fresh nonce and forwards
 the CSP to Next.js for framework scripts. Dynamic rendering prevents nonce reuse
@@ -118,9 +132,9 @@ after mount without an inline script. No raw HTML rendering is used.
 
 Both limiters are per-instance: restarts reset counters and replicas do not share
 them. Auth-screen redirects run in server pages and require an active session via
-the current-user service; middleware only gates protected routes by JWT signature.
-A still-signed cookie without a session record therefore cannot cause a redirect
-loop between the map and login after process-memory loss.
+the current-user service. Middleware does not gate the public map by JWT signature.
+A still-signed cookie without a session record renders the guest map and does not
+redirect away from auth pages after process-memory loss.
 Production needs ingress/edge limiting. Forwarded IP headers are ignored unless
 TRUST_PROXY_HEADERS=true is explicitly configured. Enable it only behind an
 ingress that strips and replaces caller-supplied x-forwarded-for and x-real-ip;

@@ -11,6 +11,7 @@ export function rangeContext(
   distanceKm?: number,
   fallback = false,
 ): string {
+  if (!evModel) return "Sign in to see range for your EV";
   if (fallback && distanceKm !== undefined)
     return `Approximate straight-line ${Math.round(distanceKm)} km · Road distance unavailable · Plan charging conservatively`;
   const range = RANGES.get(evModel);

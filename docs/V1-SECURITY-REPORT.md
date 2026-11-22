@@ -37,10 +37,20 @@ verification, not an external penetration test or production certification.
 
 Every route under `src/app/api` was reviewed: POST auth login/register/logout,
 GET auth/me, GET stations/nearby, GET geocode/search, POST routes/corridor and GET
-health. Only health and login/register are intentionally public. Logout is
-idempotent and revokes any supplied valid session. Health exposes only status.
-Protected handlers check active server-side sessions; middleware's page JWT check
-is not the authorization boundary. Unsupported methods are framework-rejected.
+health. Map discovery is intentionally public: `/` redirects to `/map`, and
+stations/nearby, geocode/search (local and explicit search) and routes/corridor
+require no session. All existing IP limits, strict Zod/body bounds, upstream host
+allowlists/timeouts and POST trusted-Origin checks remain in place for guests.
+Health and login/register remain public. Logout remains idempotent and revokes
+any supplied valid session; auth/me still requires an active server-side session.
+The map resolves sessions only for personalized header and registered-EV context;
+guests receive Sign in and neutral copy, not a fabricated vehicle. Middleware has
+no protected map prefix. Unsupported methods are framework-rejected.
+
+Charging/payment is not public discovery and is not implemented. The tested
+`authenticatedApi` wrapper remains a fail-closed server-side seam for future
+Start charging actions, which must also enforce service-level resource ownership
+and payment authorization. Guest access does not relax auth APIs or cookie flags.
 
 | OWASP 2021                | Verified controls and file evidence                                                                                                                                                                                                                                                                          | Remaining boundary                                                                                                                 |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |

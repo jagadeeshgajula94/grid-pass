@@ -132,9 +132,7 @@ it("signs out and reports failed signout", async () => {
     .mockResolvedValueOnce(new Response(null, { status: 204 }));
   render(<SignOutButton />);
   fireEvent.click(screen.getByRole("button"));
-  await waitFor(() =>
-    expect(navigation.replace).toHaveBeenCalledWith("/login"),
-  );
+  await waitFor(() => expect(navigation.replace).toHaveBeenCalledWith("/map"));
   fetchMock.mockResolvedValueOnce(new Response(null, { status: 500 }));
   fireEvent.click(screen.getByRole("button"));
   expect(await screen.findByRole("alert")).toHaveTextContent(
