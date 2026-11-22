@@ -20,6 +20,7 @@ describe("startup environment", () => {
       AUTH_SECRET: process.env.AUTH_SECRET,
       NODE_ENV: "development",
       NEXT_PUBLIC_APP_URL: "http://localhost:3000",
+      TRUST_PROXY_HEADERS: "false",
     });
   });
   it("accepts a configured production origin", () => {
@@ -45,4 +46,26 @@ describe("startup environment", () => {
       }),
     ).toThrow("Invalid environment variables: NODE_ENV");
   });
+});
+it.each([
+  "file:///etc/passwd",
+  "https://example.com/path",
+  "https://user@example.com",
+])("rejects a non-origin app URL %s", (url) => {
+  expect(() =>
+    validateEnvironment({
+      AUTH_SECRET: process.env.AUTH_SECRET,
+      NEXT_PUBLIC_APP_URL: url,
+    }),
+  ).toThrow("NEXT_PUBLIC_APP_URL");
+});
+it("validates explicit proxy-header trust", () => {
+  const input = { AUTH_SECRET: process.env.AUTH_SECRET };
+  expect(
+    validateEnvironment({ ...input, TRUST_PROXY_HEADERS: "true" })
+      .TRUST_PROXY_HEADERS,
+  ).toBe("true");
+  expect(() =>
+    validateEnvironment({ ...input, TRUST_PROXY_HEADERS: "yes" }),
+  ).toThrow("TRUST_PROXY_HEADERS");
 });

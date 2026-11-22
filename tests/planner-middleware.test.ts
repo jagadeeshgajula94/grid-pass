@@ -1,7 +1,11 @@
-import { beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { checkApi, resetLimiters } from "../src/lib/middleware-security";
-beforeEach(resetLimiters);
+beforeEach(() => {
+  resetLimiters();
+  vi.stubEnv("TRUST_PROXY_HEADERS", "true");
+});
+afterEach(() => vi.unstubAllEnvs());
 it.each([
   ["/api/geocode/search", 30],
   ["/api/routes/corridor", 10],

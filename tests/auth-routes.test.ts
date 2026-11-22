@@ -148,6 +148,23 @@ it("rejects malformed JSON", async () => {
     (await register(new Request(BASE, { method: "POST", body: "{" }))).status,
   ).toBe(400);
 });
+it("rejects oversized login and registration bodies before schema validation", async () => {
+  for (const handler of [login, register]) {
+    const body = JSON.stringify(
+      handler === login ? { email: profile.email, password } : profile,
+    );
+    for (const [payload, headers] of [
+      [body + " ".repeat(4096), {}],
+      [body, { "content-length": "4097" }],
+    ] as const) {
+      const response = await handler(
+        new Request(BASE, { method: "POST", body: payload, headers }),
+      );
+      expect(response.status).toBe(400);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    }
+  }
+});
 it("equalizes unknown-email and wrong-password errors", async () => {
   await register(request("register", profile));
   const wrong = await login(

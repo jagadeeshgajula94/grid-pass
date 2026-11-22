@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { jwtVerify } from "jose/jwt/verify";
 import { safeNext } from "../src/lib/safe-next";
@@ -10,7 +10,11 @@ import { env } from "../src/lib/env";
 vi.mock("jose/jwt/verify", () => ({ jwtVerify: vi.fn() }));
 const BASE = "https://example.com";
 const UNKNOWN = "unknown";
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.stubEnv("TRUST_PROXY_HEADERS", "true");
+});
+afterEach(() => vi.unstubAllEnvs());
 
 it.each([
   "/" + "a".repeat(2048),
@@ -56,24 +60,24 @@ it.each([
   ).toBe(false);
 });
 it.each(["other.example:3000", "[::1]:3000", "localhost"])(
-  "accepts valid matching host %s",
+  "accepts configured origins with valid Host %s",
   (host) => {
     const origin = `http://${host}`;
     expect(
       hasTrustedOrigin(
         new NextRequest(BASE, { headers: { host, origin } }),
-        BASE,
+        origin,
       ),
     ).toBe(true);
   },
 );
-it("normalizes expanded IPv6 Host addresses before comparing with Origin", () => {
+it("validates expanded IPv6 Host addresses without trusting them as origins", () => {
   const origin = "https://[2001:db8::1]:3000";
   const host = "[2001:0db8:0000:0000:0000:0000:0000:0001]:3000";
   expect(
     hasTrustedOrigin(
       new NextRequest(BASE, { headers: { origin, host } }),
-      BASE,
+      origin,
     ),
   ).toBe(true);
   expect(

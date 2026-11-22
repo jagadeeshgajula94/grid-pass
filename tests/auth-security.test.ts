@@ -1,4 +1,4 @@
-import { beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { middleware } from "../src/middleware";
 import { resetLimiters } from "../src/lib/middleware-security";
@@ -15,6 +15,7 @@ function post(path = LOGIN, origin = BASE): NextRequest {
   });
 }
 beforeEach(resetLimiters);
+afterEach(() => vi.unstubAllEnvs());
 it.each(["", "gp_session=tampered"])(
   "redirects unauthenticated map requests (%s)",
   async (cookie) => {
@@ -49,12 +50,21 @@ it.each(["https://evil.example", "null", "", "not-url", `${BASE}/path`])(
     expect(response.headers.get("content-security-policy")).toContain("nonce-");
   },
 );
-it("allows matching host or configured origin", () => {
+it("requires the configured origin even when a caller supplies matching Host", () => {
   const request = new NextRequest("https://other.example/api/auth/login", {
     headers: { host: "other.example", origin: "https://other.example" },
   });
-  expect(hasTrustedOrigin(request, BASE)).toBe(true);
+  expect(hasTrustedOrigin(request, BASE)).toBe(false);
   expect(hasTrustedOrigin(post(), BASE)).toBe(true);
+  expect(hasTrustedOrigin(post(), "invalid")).toBe(false);
+  expect(
+    hasTrustedOrigin(
+      new NextRequest("https://example.com/api/auth/login", {
+        headers: { host: "example.com", origin: "http://example.com" },
+      }),
+      "https://example.com",
+    ),
+  ).toBe(false);
 });
 it("limits the sixth login but keeps register in a separate bucket", async () => {
   for (let index = 0; index < 5; index++)
@@ -66,6 +76,7 @@ it("limits the sixth login but keeps register in a separate bucket", async () =>
   expect((await middleware(post("/api/auth/register"))).status).toBe(200);
 });
 it("extracts bounded client identity with ingress fallbacks", () => {
+  vi.stubEnv("TRUST_PROXY_HEADERS", "true");
   const request = new NextRequest(BASE, {
     headers: { "x-forwarded-for": "192.0.2.1, 192.0.2.2" },
   });
@@ -74,4 +85,17 @@ it("extracts bounded client identity with ingress fallbacks", () => {
     clientIp(new NextRequest(BASE, { headers: { "x-real-ip": "192.0.2.3" } })),
   ).toBe("192.0.2.3");
   expect(clientIp(new NextRequest(BASE))).toBe("unknown");
+});
+it("ignores caller-controlled IP headers unless a trusted proxy is configured", async () => {
+  vi.stubEnv("TRUST_PROXY_HEADERS", "false");
+  for (let index = 0; index < 61; index++) {
+    const request = new NextRequest(`${BASE}/api/health`, {
+      headers: {
+        "x-forwarded-for": `192.0.2.${index}`,
+        "x-real-ip": "192.0.2.200",
+      },
+    });
+    expect(clientIp(request)).toBe("unknown");
+    expect((await middleware(request)).status).toBe(index < 60 ? 200 : 429);
+  }
 });

@@ -41,9 +41,9 @@ Workers obey the CSP on their own script response, not the page's network policy
 
 # GridPass V1 architecture
 
-V1 delivers registration, authentication, revocable sessions and an account-gated
-map placeholder. It does not deliver mapping, charging availability or routing.
-The network preview is explicitly sample telemetry. Owners' names, email, phone,
+V1 delivers registration, authentication, revocable sessions, nearby charger
+discovery and route corridor planning. Seed availability is demonstration data;
+public providers and route fallbacks are best-effort. Owners' names, email, phone,
 vehicle and password hashes are private data; signing keys and cookies are secrets.
 
 ## Layers and trust boundaries
@@ -92,7 +92,7 @@ redacted JSON; no credentials or sensitive bodies are logged.
 | 001 | Mock repository behind typed interfaces rather than an ORM now. V2 replaces repository implementations with a real DB, adding migrations, transactions and durability without changing service contracts.                                                                                                                                                |
 | 002 | Argon2id, 19,456 KiB memory, two iterations, one lane. Unknown-email login verifies a precomputed dummy hash with the same cost. Hashing costs CPU; ingress limits remain essential.                                                                                                                                                                     |
 | 003 | jose HS256 signed JWT with required issuer, audience, expiry, subject and fresh session ID, plus a server-side seven-day session record. Rotate every authentication; revoke on logout. Cookie is HttpOnly, SameSite=Lax, Path=/, Secure in production. Middleware verifies signatures only; services also require the active record and matching owner. |
-| 004 | Origin-check CSRF on all mutating API methods: require a valid HTTP(S) Origin equal to the configured app origin or matching the request Host. SameSite is defense in depth, not the CSRF control. Trusted ingress must validate Host.                                                                                                                   |
+| 004 | Origin-check CSRF on all mutating API methods: require a canonical HTTP(S) Origin equal to NEXT_PUBLIC_APP_URL. Caller-supplied Host is validated but cannot grant trust, including across schemes. SameSite is defense in depth. Configure the exact HTTPS production origin.                                                                           |
 | 005 | In-memory sliding-window log for authentication: five POST attempts per 15 minutes, separate login/register buckets, bounded keys and 10,000-client map; fail closed at capacity. Existing fixed-window 60/min API limiter is retained. Durable/distributed limiting deferred.                                                                           |
 
 Middleware replaces caller-supplied nonce headers with a fresh nonce and forwards
@@ -119,9 +119,15 @@ them. Auth-screen redirects run in server pages and require an active session vi
 the current-user service; middleware only gates protected routes by JWT signature.
 A still-signed cookie without a session record therefore cannot cause a redirect
 loop between the map and login after process-memory loss.
-Production needs ingress/edge limiting. Trusted ingress must strip and
-replace caller-supplied x-forwarded-for and x-real-ip; otherwise clients can spoof
-limiter identity. Clients without these headers share an unknown bucket.
+Production needs ingress/edge limiting. Forwarded IP headers are ignored unless
+TRUST_PROXY_HEADERS=true is explicitly configured. Enable it only behind an
+ingress that strips and replaces caller-supplied x-forwarded-for and x-real-ip;
+otherwise clients can spoof limiter identity. Without trusted IP headers, callers
+share a conservative unknown bucket (a deliberate availability trade-off).
+
+Login, registration and corridor JSON bodies share a streamed 4 KiB limit before
+Zod parsing; declared and actual sizes are both enforced. Upstream responses use
+the same bounded reader with a separate 2 MiB limit. Neither parser logs content.
 
 ## Threat model
 

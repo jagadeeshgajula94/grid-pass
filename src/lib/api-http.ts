@@ -3,7 +3,7 @@ import type { z } from "zod";
 import { getCurrentUser } from "../services/auth.service";
 import { requestToken } from "./auth-http";
 import { logEvent } from "./logger";
-import { readLimited } from "./upstream-fetch";
+export { readApiBody } from "./request-body";
 const PRIVATE_HEADERS = { "Cache-Control": "no-store" };
 export function invalidRequest(error?: z.ZodError): NextResponse {
   return NextResponse.json(
@@ -36,18 +36,5 @@ export async function authenticatedApi(
       { error: "Something went wrong" },
       { status: 500, headers: PRIVATE_HEADERS },
     );
-  }
-}
-export async function readApiBody(
-  request: Request,
-  maxBytes = 4096,
-): Promise<unknown> {
-  try {
-    return await readLimited(
-      new Response(request.body, { headers: request.headers }),
-      maxBytes,
-    );
-  } catch {
-    return undefined;
   }
 }

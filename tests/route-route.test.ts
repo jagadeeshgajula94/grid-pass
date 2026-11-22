@@ -7,6 +7,7 @@ import { HttpOpenChargeMapRepository } from "../src/repositories/open-charge-map
 import type { CorridorDto } from "../src/domain/route";
 import { routeQuerySchema } from "../src/validation/route.schema";
 import { plannerCookie } from "./planner-test-helpers";
+import { logEvent } from "../src/lib/logger";
 const BASE = "http://localhost:3000/api/routes/corridor";
 const trip = {
   origin: { lat: 17.385, lng: 78.4867 },
@@ -123,3 +124,36 @@ it("returns safe unexpected failures", async () => {
   expect(response.status).toBe(500);
   expect(await response.json()).toEqual({ error: "Something went wrong" });
 });
+it("aborts stalled OSRM at four seconds and caches the fallback without network access", async () => {
+  const fetcher = vi.fn<typeof fetch>(
+    (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener(
+          "abort",
+          () => reject(new DOMException("Timed out", "TimeoutError")),
+          { once: true },
+        );
+      }),
+  );
+  const routes = new RouteService(
+    new OsrmRouteRepository(fetcher),
+    new HttpOpenChargeMapRepository("", fetcher),
+  );
+  const query = routeQuerySchema.parse(trip);
+  const start = performance.now();
+  const result = await routes.findCorridor(query);
+  const elapsedMs = Math.round(performance.now() - start);
+  expect(result.route.fallback).toBe(true);
+  expect(result.route.coordinates.length).toBeGreaterThan(40);
+  expect(fetcher.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+  expect(elapsedMs).toBeGreaterThanOrEqual(3900);
+  const cachedStart = performance.now();
+  expect((await routes.findCorridor(query)).route.fallback).toBe(true);
+  logEvent("info", "test.osrm_timeout", "timeout-probe", {
+    elapsedMs,
+    cachedMs: Math.round(performance.now() - cachedStart),
+    coordinates: result.route.coordinates.length,
+    distanceKm: result.route.totalDistanceKm,
+  });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+}, 8000);

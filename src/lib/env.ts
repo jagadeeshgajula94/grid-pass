@@ -13,7 +13,11 @@ const environmentSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
-  NEXT_PUBLIC_APP_URL: z.url().default("http://localhost:3000"),
+  TRUST_PROXY_HEADERS: z.enum(["true", "false"]).default("false"),
+  NEXT_PUBLIC_APP_URL: z
+    .url({ protocol: /^https?$/ })
+    .pipe(z.string().refine((value) => new URL(value).origin === value))
+    .default("http://localhost:3000"),
 });
 
 export function validateEnvironment(
