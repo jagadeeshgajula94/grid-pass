@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { validateEnvironment } from "../src/lib/env";
 
 describe("startup environment", () => {
+  it("treats a blank optional mock password as unset but rejects short values", () => {
+    const input = { AUTH_SECRET: process.env.AUTH_SECRET };
+    expect(
+      validateEnvironment({ ...input, MOCK_USER_PASSWORD: "" })
+        .MOCK_USER_PASSWORD,
+    ).toBeUndefined();
+    expect(() =>
+      validateEnvironment({ ...input, MOCK_USER_PASSWORD: "short" }),
+    ).toThrow("MOCK_USER_PASSWORD");
+  });
   it("supplies defaults while requiring a signing secret", () => {
     expect(() => validateEnvironment({})).toThrow("AUTH_SECRET");
     expect(
