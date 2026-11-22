@@ -93,7 +93,7 @@ it("aborts previous station requests and ignores stale completions", async () =>
   unmount();
   expect(fetcher.mock.calls.at(-1)?.[1].signal.aborted).toBe(true);
 });
-it("loads the workspace, selects stations, syncs themes and switches location", async () => {
+it("loads the workspace, selects stations, syncs themes and locates again", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation(() => Promise.resolve(response())),
@@ -101,17 +101,17 @@ it("loads the workspace, selects stations, syncs themes and switches location", 
   render(<MapWorkspace firstName="Aarav" />);
   expect(screen.getByText("Hello, Aarav")).toBeInTheDocument();
   await screen.findByText(STATION_NAME);
-  expect(screen.getByText("1 stations within 5 km")).toBeInTheDocument();
+  expect(screen.getByLabelText("1 matching stations")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Statiq/ }));
   expect(screen.getByRole("dialog")).toBeInTheDocument();
   fireEvent.keyDown(window, { key: "Escape" });
   expect(screen.queryByRole("dialog")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Toggle color theme" }));
   expect(document.documentElement).toHaveClass("light");
-  fireEvent.change(screen.getByLabelText("Search area"), {
-    target: { value: "Mumbai" },
-  });
-  await screen.findByText("Using Mumbai");
+  fireEvent.click(screen.getByRole("button", { name: /Current location/ }));
+  expect(screen.getByRole("combobox", { name: "Origin" })).toHaveValue(
+    "Current Location",
+  );
 });
 it("shows safe errors and an empty list when fetching fails", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));

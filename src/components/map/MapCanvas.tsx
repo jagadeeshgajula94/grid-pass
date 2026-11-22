@@ -10,8 +10,12 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { StationDto } from "../../domain/station";
 import type { Point } from "../../lib/geo";
 import { StationMarkers } from "./StationMarkers";
-import { fitCenter, updateRing } from "./map-layers";
+import { fitCenter, fitRoute, updateRoute } from "./map-layers";
+import type { RouteSummaryDto } from "../../domain/route";
+import { CorridorMarkers } from "./CorridorMarkers";
 interface CanvasProps {
+  corridor?: boolean;
+  route?: RouteSummaryDto;
   center: Point;
   light: boolean;
   stations: StationDto[];
@@ -88,20 +92,22 @@ function useMapView(
   center: Point,
   light: boolean,
   selected: StationDto | null,
+  corridor: boolean,
+  route?: RouteSummaryDto,
 ): void {
   useEffect(() => {
     map?.setStyle(styleUrl(light));
   }, [map, light]);
   useEffect(() => {
     if (!map) return;
-    const draw = (): void => updateRing(map, center);
+    const draw = (): void => updateRoute(map, corridor, center, route);
     map.on("style.load", draw);
     if (map.isStyleLoaded()) draw();
-    fitCenter(map, center);
+    if (!corridor) fitCenter(map, center);
     return (): void => {
       map.off("style.load", draw);
     };
-  }, [map, center]);
+  }, [map, center, corridor, route]);
   useEffect(() => {
     if (map && selected)
       map.flyTo({
@@ -109,7 +115,8 @@ function useMapView(
         zoom: 15,
         offset: [-100, 0],
       });
-  }, [map, selected]);
+    else if (map && route && corridor) fitRoute(map, route);
+  }, [map, selected, route, corridor]);
 }
 export function MapCanvas({
   center,
@@ -117,9 +124,11 @@ export function MapCanvas({
   stations,
   selected,
   onSelect,
+  corridor = false,
+  route,
 }: CanvasProps): ReactElement {
   const { container, map, error } = useMap();
-  useMapView(map, center, light, selected);
+  useMapView(map, center, light, selected, corridor, route);
   return (
     <>
       <div
@@ -135,9 +144,29 @@ export function MapCanvas({
       {map && (
         <>
           <UserPosition map={map} center={center} />
-          <StationMarkers map={map} stations={stations} onSelect={onSelect} />
+          <MapStationMarkers
+            map={map}
+            stations={stations}
+            onSelect={onSelect}
+            corridor={corridor}
+          />
         </>
       )}
     </>
+  );
+}
+function MapStationMarkers({
+  corridor,
+  ...props
+}: {
+  map: MapLibreMap;
+  stations: StationDto[];
+  onSelect: (station: StationDto) => void;
+  corridor: boolean;
+}): ReactElement {
+  return corridor ? (
+    <CorridorMarkers {...props} />
+  ) : (
+    <StationMarkers {...props} />
   );
 }

@@ -1,10 +1,8 @@
 import type { ReactElement } from "react";
 import { ThemeToggle } from "../auth/ThemeToggle";
 import { SignOutButton } from "../auth/SignOutButton";
-import { LocationPresets } from "./LocationPresets";
 import { FilterBar } from "./FilterBar";
 import type { StationFilters } from "./filter-stations";
-import type { useLocation } from "./use-location";
 export function WorkspaceHeader({
   firstName,
   onTheme,
@@ -27,30 +25,20 @@ export function WorkspaceHeader({
   );
 }
 interface ToolbarProps {
-  search: ReturnType<typeof useLocation>;
   count: number;
   filters: StationFilters;
   onFilters: (filters: StationFilters) => void;
 }
 export function WorkspaceToolbar({
-  search,
   count,
   filters,
   onFilters,
 }: ToolbarProps): ReactElement {
   return (
-    <section className="map-toolbar">
-      <div className="location-row glass">
-        <LocationPresets
-          value={search.location}
-          onSelect={search.choose}
-          onCurrent={search.locate}
-        />
-        <span className="location-chip" role="status">
-          {search.status}
-        </span>
-        <strong>{count} stations within 5 km</strong>
-      </div>
+    <section
+      className="planner-filters"
+      aria-label={`${count} matching stations`}
+    >
       <FilterBar filters={filters} onChange={onFilters} />
     </section>
   );

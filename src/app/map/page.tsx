@@ -10,6 +10,9 @@ export default async function MapPage(): Promise<ReactElement> {
   const result = await getCurrentUser(jar.get(SESSION_COOKIE)?.value ?? "");
   if (!result.ok) redirect("/login");
   return (
-    <MapWorkspace firstName={result.value.fullName.split(" ")[0] ?? "Driver"} />
+    <MapWorkspace
+      firstName={result.value.fullName.split(" ")[0] ?? "Driver"}
+      evModel={result.value.evModel}
+    />
   );
 }

@@ -9,6 +9,8 @@ import {
 } from "@testing-library/react";
 import { MapCanvas } from "../src/components/map/MapCanvas";
 import type { StationDto } from "../src/domain/station";
+import { corridorFixture } from "./planner-ui-fixtures";
+const RADIUS_OUTLINE = "radius-outline";
 
 const state = vi.hoisted(() => ({
   zoom: 12,
@@ -165,7 +167,7 @@ it("renders React pins, a center marker and radius; re-adds layers on style chan
   );
   emit("style.load");
   expect(state.addLayer).toHaveBeenCalledWith(
-    expect.objectContaining({ id: "radius-outline" }),
+    expect.objectContaining({ id: RADIUS_OUTLINE }),
   );
   expect(state.flyTo).toHaveBeenCalledWith(
     expect.objectContaining({ center: [station.lng, station.lat] }),
@@ -230,5 +232,34 @@ it("keeps the rest of the UI usable without WebGL", () => {
   );
   expect(screen.getByRole("status")).toHaveTextContent(
     "Map unavailable on this device",
+  );
+});
+it("hides the nearby ring in corridor mode, draws the route and restores nearby on clear", () => {
+  const props = {
+    center,
+    light: false,
+    stations: [],
+    selected: null,
+    onSelect: vi.fn(),
+  };
+  const { rerender } = render(
+    <MapCanvas {...props} corridor route={corridorFixture.route} />,
+  );
+  expect(state.removeLayer).toHaveBeenCalledWith(RADIUS_OUTLINE);
+  expect(state.addLayer).not.toHaveBeenCalledWith(
+    expect.objectContaining({ id: RADIUS_OUTLINE }),
+  );
+  expect(state.addLayer).toHaveBeenCalledWith(
+    expect.objectContaining({ id: "route-line" }),
+  );
+  expect(state.fitBounds).toHaveBeenCalledWith(
+    expect.any(Array),
+    expect.objectContaining({ maxZoom: 13 }),
+  );
+  state.addLayer.mockClear();
+  rerender(<MapCanvas {...props} corridor={false} />);
+  expect(state.removeLayer).toHaveBeenCalledWith("route-line");
+  expect(state.addLayer).toHaveBeenCalledWith(
+    expect.objectContaining({ id: RADIUS_OUTLINE }),
   );
 });

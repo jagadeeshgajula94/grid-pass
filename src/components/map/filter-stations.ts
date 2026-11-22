@@ -25,10 +25,10 @@ function matchesSpeed(
   if (speed === "ultra") return connector.powerKw >= 120;
   return true;
 }
-export function filterStations(
-  stations: StationDto[],
+export function filterStations<T extends StationDto>(
+  stations: T[],
   filters: StationFilters,
-): StationDto[] {
+): T[] {
   return stations
     .filter(
       (station) =>

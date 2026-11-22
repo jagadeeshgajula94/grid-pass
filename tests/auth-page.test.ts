@@ -44,14 +44,17 @@ it.each(pages)(
     await expect(page()).rejects.toThrow("redirect:/map");
   },
 );
-it("protects the map page and passes only the first name to the workspace", async () => {
+it("protects the map page and passes the first name and EV model to the workspace", async () => {
   await expect(MapPage()).rejects.toThrow("redirect:/login");
   for (const [email, firstName] of [
     ["aarav@example.com", "Aarav"],
     ["priya@example.com", "Priya"],
   ] as const) {
     await authenticate(email);
-    expect((await MapPage()).props).toEqual({ firstName });
+    expect((await MapPage()).props).toEqual({
+      firstName,
+      evModel: expect.any(String),
+    });
   }
 });
 it("renders both auth pages after store loss despite a valid signed JWT", async () => {

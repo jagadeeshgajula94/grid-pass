@@ -1,7 +1,85 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
-import { boundingBox, circleCoordinates, type Point } from "../../lib/geo";
+import {
+  boundingBox,
+  circleCoordinates,
+  routeBounds,
+  type Point,
+} from "../../lib/geo";
+import type { RouteSummaryDto } from "../../domain/route";
 const OUTLINE_LAYER = "radius-outline";
 const FILL_LAYER = "radius-fill";
+function removeLayers(
+  map: MapLibreMap,
+  source: string,
+  layers: string[],
+): void {
+  for (const layer of layers) if (map.getLayer(layer)) map.removeLayer(layer);
+  if (map.getSource(source)) map.removeSource(source);
+}
+export function updateRoute(
+  map: MapLibreMap,
+  corridor: boolean,
+  center: Point,
+  route?: RouteSummaryDto,
+): void {
+  removeLayers(map, "route", ["route-line", "route-casing"]);
+  if (!corridor) {
+    updateRing(map, center);
+    return;
+  }
+  removeLayers(map, "radius", [OUTLINE_LAYER, FILL_LAYER]);
+  if (!route) return;
+  map.addSource("route", {
+    type: "geojson",
+    data: {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "LineString",
+        coordinates: route.coordinates.map((point) => [point.lng, point.lat]),
+      },
+    },
+  });
+  for (const [id, color, width] of [
+    ["route-casing", "#0b0f17", 9],
+    ["route-line", "#10b981", 4],
+  ] as const) {
+    map.addLayer({
+      id,
+      type: "line",
+      source: "route",
+      layout: { "line-join": "round", "line-cap": "round" },
+      paint: { "line-color": color, "line-width": width },
+    });
+  }
+}
+export function fitRoute(map: MapLibreMap, route: RouteSummaryDto): void {
+  const box = routeBounds(route.coordinates, 1);
+  map.fitBounds(
+    [
+      [box.west, box.south],
+      [box.east, box.north],
+    ],
+    {
+      padding:
+        window.innerWidth >= 768
+          ? {
+              left: 370,
+              right: 70,
+              top: Math.min(410, window.innerHeight * 0.5),
+              bottom: 70,
+            }
+          : {
+              left: 30,
+              right: 30,
+              top: window.innerHeight * 0.42,
+              bottom: window.innerHeight * 0.25,
+            },
+      duration: 900,
+      maxZoom: 13,
+    },
+  );
+}
 export function updateRing(map: MapLibreMap, center: Point): void {
   if (map.getLayer(OUTLINE_LAYER)) map.removeLayer(OUTLINE_LAYER);
   if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER);
@@ -42,8 +120,8 @@ export function fitCenter(map: MapLibreMap, center: Point): void {
     {
       padding:
         window.innerWidth >= 768
-          ? { left: 370, right: 80, top: 220, bottom: 60 }
-          : { left: 25, right: 25, top: 245, bottom: 150 },
+          ? { left: 370, right: 80, top: 310, bottom: 60 }
+          : { left: 25, right: 25, top: 350, bottom: 150 },
       duration: 1000,
       maxZoom: 14,
     },
