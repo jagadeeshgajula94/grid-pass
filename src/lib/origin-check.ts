@@ -36,9 +36,7 @@ export function hasTrustedOrigin(
   if (!origin.success || !host.success) return false;
   try {
     const parsed = new URL(origin.data);
-    return (
-      parsed.origin === new URL(appUrl).origin || parsed.host === host.data
-    );
+    return parsed.origin === new URL(appUrl).origin;
   } catch {
     return false;
   }

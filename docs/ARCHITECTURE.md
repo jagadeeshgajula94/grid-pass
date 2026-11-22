@@ -1,5 +1,32 @@
 # Nearby stations proxy trust boundary
 
+## Corridor and geocoding server boundary
+
+Authenticated geocode and corridor endpoints delegate strict validated inputs to
+services and typed repositories. The shared upstream fetcher permits only HTTPS
+on exact Nominatim, OSRM, and OCM hostnames, rejects credentials, nondefault ports
+and redirects, bounds streamed JSON to two MiB, and applies abort timeouts.
+Nominatim receives a custom identifying User-Agent and India-only queries; search
+text and coordinates are never logged. Upstream DTOs are schema-validated.
+
+Typing requests local city/highway landmarks only; public Nominatim is never used
+for autocomplete. Explicit Enter without a highlighted suggestion or Search places
+requests validated `mode=search` and awaits Nominatim enrichment. Explicit searches
+use a process-global one-request-per-second reservation queue (wait at most 1.5 s);
+excess demand returns a retryable 503 instead of silently dropping the search.
+Explicit results use a separate 500-entry, 24-hour cache. OSRM routes use a bounded five-minute
+cache keyed by four-decimal endpoints. Failed routes are explicitly flagged
+great-circle fallbacks with five-kilometre geometry steps and 55 km/h estimates.
+Detours are approximate twice-perpendicular distances, not road directions.
+Corridor candidates combine seeds within expanded bounds and OCM queries at at
+most eight route samples; remote coverage is best-effort, not exhaustive.
+
+The existing API and Origin/CSRF controls cover both endpoints; additional IP
+limits are 30 geocode and 10 corridor requests per minute. All caches, throttles,
+and limits are process-local. Public provider availability, distributed throttling,
+and ingress-controlled DNS/forwarded-IP trust remain deployment concerns. Browser
+CSP does not change because upstream access is server-only.
+
 Authenticated `GET /api/stations/nearby` validates strict allowlisted query parameters before delegating to the station service and typed repositories. Existing `/api/*` middleware rate limiting applies. Session cookies are read from request headers, never reconstructed as requests. Responses expose only station DTOs; error responses are generic and uncached, successful responses are private for 30 seconds.
 
 The OCM repository is the only external station egress: HTTPS `api.openchargemap.io/v3/poi`, constant host verification, redirects rejected, a three-second abort signal, and a streamed two-MiB response bound. The optional server-only API key is sent only as `X-API-Key`. Zod validates upstream fields, removes control characters and limits text lengths; markup remains plain text and must never be rendered as HTML. Unknown connector types are dropped; unknown tariffs are null. Operational OCM connectors indicate availability only approximately, not live occupancy.
@@ -16,9 +43,9 @@ Workers obey the CSP on their own script response, not the page's network policy
 
 # GridPass V1 architecture
 
-V1 delivers registration, authentication, revocable sessions and an account-gated
-map placeholder. It does not deliver mapping, charging availability or routing.
-The network preview is explicitly sample telemetry. Owners' names, email, phone,
+V1 delivers registration, authentication, revocable sessions, nearby charger
+discovery and route corridor planning. Seed availability is demonstration data;
+public providers and route fallbacks are best-effort. Owners' names, email, phone,
 vehicle and password hashes are private data; signing keys and cookies are secrets.
 
 ## Layers and trust boundaries
@@ -67,7 +94,7 @@ redacted JSON; no credentials or sensitive bodies are logged.
 | 001 | Mock repository behind typed interfaces rather than an ORM now. V2 replaces repository implementations with a real DB, adding migrations, transactions and durability without changing service contracts.                                                                                                                                                |
 | 002 | Argon2id, 19,456 KiB memory, two iterations, one lane. Unknown-email login verifies a precomputed dummy hash with the same cost. Hashing costs CPU; ingress limits remain essential.                                                                                                                                                                     |
 | 003 | jose HS256 signed JWT with required issuer, audience, expiry, subject and fresh session ID, plus a server-side seven-day session record. Rotate every authentication; revoke on logout. Cookie is HttpOnly, SameSite=Lax, Path=/, Secure in production. Middleware verifies signatures only; services also require the active record and matching owner. |
-| 004 | Origin-check CSRF on all mutating API methods: require a valid HTTP(S) Origin equal to the configured app origin or matching the request Host. SameSite is defense in depth, not the CSRF control. Trusted ingress must validate Host.                                                                                                                   |
+| 004 | Origin-check CSRF on all mutating API methods: require a canonical HTTP(S) Origin equal to NEXT_PUBLIC_APP_URL. Caller-supplied Host is validated but cannot grant trust, including across schemes. SameSite is defense in depth. Configure the exact HTTPS production origin.                                                                           |
 | 005 | In-memory sliding-window log for authentication: five POST attempts per 15 minutes, separate login/register buckets, bounded keys and 10,000-client map; fail closed at capacity. Existing fixed-window 60/min API limiter is retained. Durable/distributed limiting deferred.                                                                           |
 
 Middleware replaces caller-supplied nonce headers with a fresh nonce and forwards
@@ -94,9 +121,15 @@ them. Auth-screen redirects run in server pages and require an active session vi
 the current-user service; middleware only gates protected routes by JWT signature.
 A still-signed cookie without a session record therefore cannot cause a redirect
 loop between the map and login after process-memory loss.
-Production needs ingress/edge limiting. Trusted ingress must strip and
-replace caller-supplied x-forwarded-for and x-real-ip; otherwise clients can spoof
-limiter identity. Clients without these headers share an unknown bucket.
+Production needs ingress/edge limiting. Forwarded IP headers are ignored unless
+TRUST_PROXY_HEADERS=true is explicitly configured. Enable it only behind an
+ingress that strips and replaces caller-supplied x-forwarded-for and x-real-ip;
+otherwise clients can spoof limiter identity. Without trusted IP headers, callers
+share a conservative unknown bucket (a deliberate availability trade-off).
+
+Login, registration and corridor JSON bodies share a streamed 4 KiB limit before
+Zod parsing; declared and actual sizes are both enforced. Upstream responses use
+the same bounded reader with a separate 2 MiB limit. Neither parser logs content.
 
 ## Threat model
 

@@ -9,6 +9,7 @@ const forwardedIpSchema = z
   .pipe(ipSchema);
 const realIpSchema = z.string().max(64).trim().pipe(ipSchema);
 export function clientIp(request: NextRequest): string {
+  if (process.env.TRUST_PROXY_HEADERS !== "true") return "unknown";
   const forwarded = request.headers.get("x-forwarded-for");
   const result = forwarded
     ? forwardedIpSchema.safeParse(forwarded)

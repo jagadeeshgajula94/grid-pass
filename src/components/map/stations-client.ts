@@ -4,7 +4,7 @@ import type { Point } from "../../lib/geo";
 import type { Result } from "../../lib/result";
 import { AppError, type ErrorCode } from "../../lib/errors";
 
-const stationSchema = z.object({
+export const stationSchema = z.object({
   id: z.string().max(100),
   name: z.string().max(200),
   network: z.enum(NETWORKS),

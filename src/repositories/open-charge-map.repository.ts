@@ -9,9 +9,8 @@ import type { Result } from "../lib/result";
 import { env } from "../lib/env";
 import { ocmPayloadSchema, type OcmPoi } from "../validation/stations.schema";
 import type { Point } from "../lib/geo";
+import { upstreamFetch } from "../lib/upstream-fetch";
 
-const OCM_HOST = "api.openchargemap.io";
-const MAX_BYTES = 2 * 1024 * 1024;
 export interface OpenChargeMapRepository {
   findNearby(
     center: Point,
@@ -64,26 +63,6 @@ function toStation(poi: OcmPoi): StationDto {
     lastUpdated: poi.DateLastStatusUpdate ?? "1970-01-01T00:00:00.000Z",
   };
 }
-async function readLimited(response: Response): Promise<unknown> {
-  if (Number(response.headers.get("content-length")) > MAX_BYTES)
-    throw new Error("Oversized response");
-  if (!response.body) throw new Error("Empty response");
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let length = 0;
-  try {
-    for (;;) {
-      const next = await reader.read();
-      if (next.done) break;
-      length += next.value.byteLength;
-      if (length > MAX_BYTES) throw new Error("Oversized response");
-      chunks.push(next.value);
-    }
-  } finally {
-    await reader.cancel();
-  }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
-}
 export class HttpOpenChargeMapRepository implements OpenChargeMapRepository {
   constructor(
     private readonly apiKey = env.OPEN_CHARGE_MAP_API_KEY,
@@ -106,15 +85,11 @@ export class HttpOpenChargeMapRepository implements OpenChargeMapRepository {
         compact: "false",
         verbose: "true",
       }).toString();
-      if (url.hostname !== OCM_HOST || url.protocol !== "https:")
-        throw new Error("Invalid upstream host");
-      const response = await this.fetcher(url, {
-        headers: { "X-API-Key": this.apiKey },
-        redirect: "error",
-        signal: AbortSignal.timeout(3000),
+      const response = await upstreamFetch(url, 3000, this.fetcher, {
+        "X-API-Key": this.apiKey,
       });
-      if (!response.ok) throw new Error("Upstream failure");
-      const parsed = ocmPayloadSchema.safeParse(await readLimited(response));
+      if (!response.ok) return response;
+      const parsed = ocmPayloadSchema.safeParse(response.value);
       if (!parsed.success) throw new Error("Invalid upstream payload");
       return {
         ok: true,

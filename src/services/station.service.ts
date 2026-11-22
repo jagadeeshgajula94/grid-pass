@@ -31,9 +31,15 @@ function similarName(a: string, b: string): boolean {
     (left.includes(right) || right.includes(left))
   );
 }
-function merge(local: StationDto[], remote: StationDto[]): StationDto[] {
-  const merged = [...local];
-  for (const station of remote) {
+export function merge(local: StationDto[], remote: StationDto[]): StationDto[] {
+  const ids = new Set<string>();
+  const firstById = (station: StationDto): boolean => {
+    const duplicate = ids.has(station.id);
+    ids.add(station.id);
+    return !duplicate;
+  };
+  const merged = local.filter(firstById);
+  for (const station of remote.filter(firstById)) {
     if (
       !merged.some(
         (existing) =>
@@ -45,7 +51,7 @@ function merge(local: StationDto[], remote: StationDto[]): StationDto[] {
   }
   return merged;
 }
-function matches(station: StationDto, query: NearbyQuery): boolean {
+export function matches(station: StationDto, query: NearbyQuery): boolean {
   return (
     station.distanceKm <= query.radiusKm &&
     (!query.network || station.network === query.network) &&

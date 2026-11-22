@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { z } from "zod";
 import { AppError } from "./errors";
 import { logEvent } from "./logger";
+import { readApiBody } from "./request-body";
 import { loginSchema, registerSchema } from "../validation/auth.schema";
 import {
   login,
@@ -19,14 +20,6 @@ export function requestToken(request: Request): string {
     .map((value) => value.trim())
     .find((value) => value.startsWith(`${SESSION_COOKIE}=`));
   return cookie?.slice(SESSION_COOKIE.length + 1) ?? "";
-}
-type ParsedBody = { ok: true; value: unknown } | { ok: false };
-async function readBody(request: Request): Promise<ParsedBody> {
-  try {
-    return { ok: true, value: (await request.json()) as unknown };
-  } catch {
-    return { ok: false };
-  }
 }
 function errorResponse(error: AppError): NextResponse {
   const statuses = {
@@ -54,10 +47,9 @@ async function authenticate(
   request: Request,
   kind: "login" | "register",
 ): Promise<NextResponse> {
-  const body = await readBody(request);
-  if (!body.ok) return validationResponse();
+  const body = await readApiBody(request);
   const schema = kind === "login" ? loginSchema : registerSchema;
-  const parsed = schema.safeParse(body.value);
+  const parsed = schema.safeParse(body);
   if (!parsed.success) return validationResponse(parsed.error);
   const result =
     kind === "login"
