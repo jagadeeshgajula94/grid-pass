@@ -23,6 +23,10 @@ it("rejects invalid query, unknown and duplicate parameters", async () => {
   for (const query of [
     "q=x",
     "q=%3Cscript%3E",
+    "q=Delhi%00City",
+    "q=Delhi%0ACity",
+    "q=Delhi%7Bcity%7D",
+    "q=Delhi%3Bcity",
     "q=Vijay&q=Delhi",
     "q=Vijay&extra=1",
     "q=Vijay&mode=invalid",
@@ -34,6 +38,18 @@ it("rejects invalid query, unknown and duplicate parameters", async () => {
       (await GET(new Request(`${BASE}?${query}`, { headers }))).status,
     ).toBe(400);
 });
+it.each(["చెన్నై", "हैदराबाद", "హైదరాబాద్"])(
+  "accepts combining marks in %s",
+  async (query) => {
+    const response = await GET(
+      new Request(`${BASE}?${new URLSearchParams({ q: query })}`, {
+        headers: { cookie: await plannerCookie() },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ places: [] });
+  },
+);
 it("returns instant local landmarks without network and caches results", async () => {
   const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error("offline"));
   const geocode = new GeocodeService(new NominatimGeocodeRepository(fetcher));

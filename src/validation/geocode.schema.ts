@@ -9,13 +9,14 @@ export const geocodeQuerySchema = z.strictObject({
   q: z
     .string()
     .max(160)
+    .regex(/^[^\p{Cc}]+$/u)
     .transform(clean)
     .pipe(
       z
         .string()
         .min(2)
         .max(80)
-        .regex(/^[\p{L}\p{N} ,.'()/\-]+$/u),
+        .regex(/^[\p{L}\p{M}\p{N} ,.'()/\-]+$/u),
     ),
 });
 export const nominatimPayloadSchema = z
