@@ -56,6 +56,15 @@ interface SheetDrag {
   onPointerUp: (event: PointerEvent<HTMLDivElement>) => void;
   onPointerCancel: () => void;
 }
+function releasedSnap(
+  snap: SheetSnap,
+  distance: number,
+  height: number,
+): SheetSnap | undefined {
+  if (Math.abs(distance) < 5) return snap === "peek" ? "half" : "peek";
+  if (window.innerWidth >= 768) return undefined;
+  return nearestSnap(height + distance, window.innerHeight);
+}
 function useSheetDrag(
   snap: SheetSnap,
   setSnap: (snap: SheetSnap) => void,
@@ -81,7 +90,7 @@ function useSheetDrag(
       };
     },
     onPointerMove: (event): void => {
-      if (drag.current)
+      if (drag.current && window.innerWidth < 768)
         setHeight(
           Math.max(
             150,
@@ -95,12 +104,8 @@ function useSheetDrag(
     onPointerUp: (event): void => {
       if (!drag.current) return;
       const distance = drag.current.y - event.clientY;
-      const tapped = snap === "peek" ? "half" : "peek";
-      setSnap(
-        Math.abs(distance) < 5
-          ? tapped
-          : nearestSnap(drag.current.height + distance, window.innerHeight),
-      );
+      const next = releasedSnap(snap, distance, drag.current.height);
+      if (next) setSnap(next);
       cancel();
     },
     onPointerCancel: cancel,

@@ -134,6 +134,28 @@ it("taps the handle to expand and collapse without a drag", () => {
     expect(handle).toHaveAttribute(VALUE_TEXT, snap);
   }
 });
+it("ignores desktop drags but retains collapse taps and keyboard expansion", () => {
+  vi.stubGlobal("innerWidth", 1440);
+  render(<Harness />);
+  const handle = screen.getByRole("slider");
+  const panel = screen.getByRole("region", { name: "Explore charging" });
+  vi.spyOn(panel, "getBoundingClientRect").mockReturnValue({
+    ...new DOMRect(),
+    height: 650,
+  });
+  for (const clientY of [0, 200]) {
+    fireEvent.pointerDown(handle, { clientY: 100, button: 0 });
+    fireEvent.pointerMove(handle, { clientY });
+    expect(panel.style.height).toBe("");
+    fireEvent.pointerUp(handle, { clientY });
+    expect(handle).toHaveAttribute(VALUE_TEXT, "half");
+  }
+  fireEvent.pointerDown(handle, { clientY: 100, button: 0 });
+  fireEvent.pointerUp(handle, { clientY: 100 });
+  expect(handle).toHaveAttribute(VALUE_TEXT, "peek");
+  fireEvent.keyDown(handle, { key: "Enter" });
+  expect(handle).toHaveAttribute(VALUE_TEXT, "half");
+});
 it("counts active filters, toggles quick chips, opens the panel and resets", () => {
   render(<Filters />);
   expect(screen.queryByLabelText("Connector")).toBeNull();

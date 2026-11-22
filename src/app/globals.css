@@ -789,6 +789,10 @@
   }
 }
 @media (min-width: 768px) {
+  .sheet-handle {
+    cursor: pointer;
+    touch-action: manipulation;
+  }
   .bottom-sheet {
     left: 20px;
     right: auto;
