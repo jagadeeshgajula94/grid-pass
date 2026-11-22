@@ -1,6 +1,10 @@
 import { z } from "./zod";
 
 const environmentSchema = z.object({
+  OPEN_CHARGE_MAP_API_KEY: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.string().trim().min(1).max(512).optional(),
+  ),
   AUTH_SECRET: z.string().min(32),
   MOCK_USER_PASSWORD: z.preprocess(
     (value) => (value === "" ? undefined : value),

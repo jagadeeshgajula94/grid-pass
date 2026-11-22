@@ -9,9 +9,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     process.env.NODE_ENV === "development"
       ? "style-src 'self' 'unsafe-inline'"
       : `style-src 'self' 'nonce-${nonce}'`,
-    "img-src 'self' data:",
+    "img-src 'self' data: blob: https://basemaps.cartocdn.com https://tiles.basemaps.cartocdn.com",
     "font-src 'self'",
-    "connect-src 'self'",
+    "connect-src 'self' https://basemaps.cartocdn.com https://tiles.basemaps.cartocdn.com",
+    "worker-src 'self' blob:",
+    "child-src blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

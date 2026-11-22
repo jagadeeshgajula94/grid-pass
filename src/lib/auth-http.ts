@@ -1,4 +1,4 @@
-import { NextResponse, NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 import type { z } from "zod";
 import { AppError } from "./errors";
 import { logEvent } from "./logger";
@@ -13,12 +13,12 @@ import { sessionCookieOptions } from "../services/session.service";
 import { SESSION_COOKIE } from "../services/session-token";
 
 const RESPONSE_HEADERS = { "Cache-Control": "no-store" };
-function requestToken(request: Request): string {
-  return (
-    new NextRequest(request.url, { headers: request.headers }).cookies.get(
-      SESSION_COOKIE,
-    )?.value ?? ""
-  );
+export function requestToken(request: Request): string {
+  const cookie = (request.headers.get("cookie") ?? "")
+    .split(";")
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(`${SESSION_COOKIE}=`));
+  return cookie?.slice(SESSION_COOKIE.length + 1) ?? "";
 }
 type ParsedBody = { ok: true; value: unknown } | { ok: false };
 async function readBody(request: Request): Promise<ParsedBody> {
@@ -34,6 +34,7 @@ function errorResponse(error: AppError): NextResponse {
     EMAIL_TAKEN: 409,
     INVALID_CREDENTIALS: 401,
     UNAUTHENTICATED: 401,
+    UPSTREAM_UNAVAILABLE: 503,
   };
   return NextResponse.json(
     { error: error.message },

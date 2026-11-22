@@ -27,6 +27,16 @@ const nextConfig: NextConfig = {
             : []),
         ],
       },
+      {
+        source: "/_next/static/media/maplibre-gl-worker.:hash([a-f0-9]+).mjs",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value:
+              "default-src 'none'; script-src 'self'; connect-src 'self' https://basemaps.cartocdn.com https://tiles.basemaps.cartocdn.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+          },
+        ],
+      },
     ];
   },
 };

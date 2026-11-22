@@ -18,6 +18,14 @@ it("sets fresh nonce CSP on responses and forwarded requests", async () => {
   const policy = response.headers.get(CSP_HEADER);
   expect(policy).toContain("'nonce-");
   expect(policy).toContain("frame-ancestors 'none'");
+  expect(policy).toContain(
+    "img-src 'self' data: blob: https://basemaps.cartocdn.com https://tiles.basemaps.cartocdn.com",
+  );
+  expect(policy).toContain(
+    "connect-src 'self' https://basemaps.cartocdn.com https://tiles.basemaps.cartocdn.com",
+  );
+  expect(policy).toContain("worker-src 'self' blob:");
+  expect(policy).toContain("child-src blob:");
   expect(policy).not.toContain(UNSAFE_INLINE);
   expect(policy).not.toContain("unsafe-eval");
   expect(

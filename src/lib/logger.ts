@@ -16,7 +16,7 @@ function redact(value: unknown): unknown {
 }
 
 export function logEvent(
-  level: "info" | "error",
+  level: "info" | "warn" | "error",
   event: string,
   requestId: string,
   context: LogContext = {},
