@@ -20,7 +20,7 @@ export function useStations({ lat, lng }: Point): StationState {
       if (!controller.signal.aborted)
         setState({
           stations: result.ok ? result.value : [],
-          error: result.ok ? "" : result.error,
+          error: result.ok ? "" : result.error.message,
           loading: false,
         });
     });

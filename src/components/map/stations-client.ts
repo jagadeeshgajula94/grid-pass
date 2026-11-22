@@ -2,6 +2,7 @@ import { z } from "../../lib/zod";
 import { CONNECTORS, NETWORKS, type StationDto } from "../../domain/station";
 import type { Point } from "../../lib/geo";
 import type { Result } from "../../lib/result";
+import { AppError, type ErrorCode } from "../../lib/errors";
 
 const stationSchema = z.object({
   id: z.string().max(100),
@@ -28,10 +29,13 @@ const responseSchema = z.object({
   radiusKm: z.number(),
   sources: z.array(z.string()),
 });
+function failure(code: ErrorCode, message: string): Result<never, AppError> {
+  return { ok: false, error: new AppError(code, message) };
+}
 export async function fetchStations(
   center: Point,
   signal: AbortSignal,
-): Promise<Result<StationDto[], string>> {
+): Promise<Result<StationDto[], AppError>> {
   try {
     const query = new URLSearchParams({
       lat: String(center.lat),
@@ -40,18 +44,26 @@ export async function fetchStations(
     });
     const response = await fetch(`/api/stations/nearby?${query}`, { signal });
     if (response.status === 401)
-      return { ok: false, error: "Session expired. Please sign in again." };
+      return failure(
+        "UNAUTHENTICATED",
+        "Session expired. Please sign in again.",
+      );
     if (!response.ok)
-      return {
-        ok: false,
-        error: "Unable to load stations. Try another location.",
-      };
+      return failure(
+        "UPSTREAM_UNAVAILABLE",
+        "Unable to load stations. Try another location.",
+      );
     const payload: unknown = await response.json();
     const parsed = responseSchema.safeParse(payload);
     return parsed.success
       ? { ok: true, value: parsed.data.stations }
-      : { ok: false, error: "Station data unavailable." };
-  } catch {
-    return { ok: false, error: "Connection unavailable. Please retry." };
+      : failure("VALIDATION", "Station data unavailable.");
+  } catch (error: unknown) {
+    return error instanceof SyntaxError
+      ? failure("VALIDATION", "Station data unavailable.")
+      : failure(
+          "UPSTREAM_UNAVAILABLE",
+          "Connection unavailable. Please retry.",
+        );
   }
 }
