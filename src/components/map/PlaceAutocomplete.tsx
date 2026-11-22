@@ -14,6 +14,7 @@ interface PlaceOptionsProps {
   error: string;
   active: number;
   onSelect: (place: PlaceDto) => void;
+  onSearch: () => void;
 }
 function PlaceOptions({
   id,
@@ -23,6 +24,7 @@ function PlaceOptions({
   error,
   active,
   onSelect,
+  onSearch,
 }: PlaceOptionsProps): ReactElement {
   return (
     <div className="place-options glass">
@@ -53,10 +55,15 @@ function PlaceOptions({
           </li>
         ))}
       </ul>
+      <button type="button" onClick={onSearch}>
+        Search places
+      </button>
     </div>
   );
 }
 interface AutocompleteState {
+  searchVersion: number;
+  search: () => void;
   query: string | null;
   open: boolean;
   active: number;
@@ -76,6 +83,7 @@ function navigatePlaces(
     focus: () => void;
     choose: (place: PlaceDto) => void;
     setActive: (value: number) => void;
+    search: () => void;
   },
 ): void {
   if (event.key === "Escape") {
@@ -96,16 +104,34 @@ function navigatePlaces(
     );
   }
   const place = places.at(state.active);
-  if (event.key === "Enter" && state.active >= 0 && place && state.open) {
+  if (event.key === "Enter") {
     event.preventDefault();
-    state.choose(place);
+    if (state.active >= 0 && place && state.open) state.choose(place);
+    else state.search();
   }
+}
+function useExplicitSearch(query: string | null): {
+  searchVersion: number;
+  reset: () => void;
+  search: () => void;
+} {
+  const [searchVersion, setVersion] = useState(0);
+  return {
+    searchVersion,
+    reset: (): void => setVersion(0),
+    search: (): void => {
+      if (query && query.trim().length >= 2)
+        setVersion((version) => version + 1);
+    },
+  };
 }
 function useAutocomplete(onSelect: PlaceProps["onSelect"]): AutocompleteState {
   const [query, setQuery] = useState<string | null>(null);
+  const explicit = useExplicitSearch(query);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const dismiss = (): void => {
+    explicit.reset();
     setOpen(false);
     setQuery(null);
     setActive(-1);
@@ -116,6 +142,8 @@ function useAutocomplete(onSelect: PlaceProps["onSelect"]): AutocompleteState {
   };
   const focus = (): void => setOpen(true);
   return {
+    searchVersion: explicit.searchVersion,
+    search: explicit.search,
     query,
     open,
     active,
@@ -129,9 +157,11 @@ function useAutocomplete(onSelect: PlaceProps["onSelect"]): AutocompleteState {
         focus,
         choose,
         setActive,
+        search: explicit.search,
       }),
     focus,
     change: (value): void => {
+      explicit.reset();
       setQuery(value);
       setOpen(true);
       setActive(-1);
@@ -183,6 +213,7 @@ export function PlaceAutocomplete({
   const results = usePlaceSearch(
     state.query ?? "",
     state.open && state.query !== null,
+    state.searchVersion,
   );
   const expanded =
     state.open && state.query !== null && state.query.trim().length >= 2;
@@ -208,6 +239,7 @@ export function PlaceAutocomplete({
           label={label}
           active={state.active}
           onSelect={state.choose}
+          onSearch={state.search}
         />
       )}
     </div>

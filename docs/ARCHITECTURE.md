@@ -9,10 +9,12 @@ and redirects, bounds streamed JSON to two MiB, and applies abort timeouts.
 Nominatim receives a custom identifying User-Agent and India-only queries; search
 text and coordinates are never logged. Upstream DTOs are schema-validated.
 
-Local city/highway autocomplete matches return immediately, with best-effort
-background Nominatim enrichment merged into the cache for subsequent searches.
-Searches use a process-global one-request-per-second Nominatim
-throttle and a 500-entry, 24-hour cache. OSRM routes use a bounded five-minute
+Typing requests local city/highway landmarks only; public Nominatim is never used
+for autocomplete. Explicit Enter without a highlighted suggestion or Search places
+requests validated `mode=search` and awaits Nominatim enrichment. Explicit searches
+use a process-global one-request-per-second reservation queue (wait at most 1.5 s);
+excess demand returns a retryable 503 instead of silently dropping the search.
+Explicit results use a separate 500-entry, 24-hour cache. OSRM routes use a bounded five-minute
 cache keyed by four-decimal endpoints. Failed routes are explicitly flagged
 great-circle fallbacks with five-kilometre geometry steps and 55 km/h estimates.
 Detours are approximate twice-perpendicular distances, not road directions.

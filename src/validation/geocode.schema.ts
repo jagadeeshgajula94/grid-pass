@@ -5,6 +5,7 @@ const clean = (value: string): string =>
     .join("")
     .trim();
 export const geocodeQuerySchema = z.strictObject({
+  mode: z.enum(["local", "search"]).default("local"),
   q: z
     .string()
     .max(160)

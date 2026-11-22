@@ -6,7 +6,11 @@ interface PlaceState {
   loading: boolean;
   error: string;
 }
-export function usePlaceSearch(query: string, enabled: boolean): PlaceState {
+export function usePlaceSearch(
+  query: string,
+  enabled: boolean,
+  searchVersion = 0,
+): PlaceState {
   const [state, setState] = useState<PlaceState>({
     places: [],
     loading: false,
@@ -16,21 +20,28 @@ export function usePlaceSearch(query: string, enabled: boolean): PlaceState {
     const controller = new AbortController();
     const eligible = enabled && query.trim().length >= 2;
     setState({ places: [], loading: eligible, error: "" });
-    const timer = setTimeout(() => {
-      if (!eligible) return;
-      void fetchPlaces(query.trim(), controller.signal).then((result) => {
-        if (!controller.signal.aborted)
-          setState({
-            places: result.ok ? (result.value ?? []) : [],
-            loading: false,
-            error: result.ok ? "" : result.error.message,
-          });
-      });
-    }, 250);
+    const timer = setTimeout(
+      () => {
+        if (!eligible) return;
+        void fetchPlaces(
+          query.trim(),
+          controller.signal,
+          searchVersion ? "search" : "local",
+        ).then((result) => {
+          if (!controller.signal.aborted)
+            setState({
+              places: result.ok ? (result.value ?? []) : [],
+              loading: false,
+              error: result.ok ? "" : result.error.message,
+            });
+        });
+      },
+      searchVersion ? 0 : 250,
+    );
     return (): void => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [query, enabled]);
+  }, [query, enabled, searchVersion]);
   return state;
 }
