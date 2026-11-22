@@ -110,7 +110,7 @@ it("loads the workspace, selects stations, syncs themes and locates again", asyn
   expect(document.documentElement).toHaveClass("light");
   fireEvent.click(screen.getByRole("button", { name: /Current location/ }));
   expect(screen.getByRole("combobox", { name: "Origin" })).toHaveValue(
-    "Current Location",
+    "Hyderabad — location unavailable",
   );
 });
 it("shows safe errors and an empty list when fetching fails", async () => {
@@ -164,6 +164,11 @@ it.each(["success", "denied", "timeout"])(
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0]?.[0]).toContain(
       outcome === "success" ? "lat=13&lng=80" : "lat=17.385&lng=78.4867",
+    );
+    expect(screen.getByRole("combobox", { name: "Origin" })).toHaveValue(
+      outcome === "success"
+        ? "Current location"
+        : "Hyderabad — location unavailable",
     );
   },
 );

@@ -72,7 +72,7 @@ function useWorkspace(): WorkspaceState {
   );
   const corridor = useCorridor(
     search.center,
-    planner.destination,
+    search.resolved ? planner.destination : null,
     planner.bufferKm,
   );
   const isCorridor = !!planner.destination;
