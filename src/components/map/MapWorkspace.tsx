@@ -28,7 +28,10 @@ export function MapWorkspace({
   const [light, setLight] = useState(false);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [selected, setSelected] = useState<StationDto | null>(null);
-  const { stations, loading, error } = useStations(search.center);
+  const { stations, loading, error } = useStations(
+    search.center,
+    search.resolved,
+  );
   const filtered = useMemo(
     () => filterStations(stations, filters),
     [stations, filters],

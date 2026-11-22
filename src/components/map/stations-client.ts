@@ -59,6 +59,11 @@ export async function fetchStations(
       ? { ok: true, value: parsed.data.stations }
       : failure("VALIDATION", "Station data unavailable.");
   } catch (error: unknown) {
+    if (
+      signal.aborted ||
+      (error instanceof Error && error.name === "AbortError")
+    )
+      return failure("ABORTED", "Station request canceled.");
     return error instanceof SyntaxError
       ? failure("VALIDATION", "Station data unavailable.")
       : failure(

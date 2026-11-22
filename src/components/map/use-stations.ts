@@ -7,24 +7,31 @@ interface StationState {
   loading: boolean;
   error: string;
 }
-export function useStations({ lat, lng }: Point): StationState {
+export function useStations({ lat, lng }: Point, enabled = true): StationState {
   const [state, setState] = useState<StationState>({
     stations: [],
     loading: true,
     error: "",
   });
   useEffect(() => {
+    if (!enabled) {
+      setState({ stations: [], loading: false, error: "" });
+      return;
+    }
     const controller = new AbortController();
     setState({ stations: [], loading: true, error: "" });
     void fetchStations({ lat, lng }, controller.signal).then((result) => {
       if (!controller.signal.aborted)
         setState({
           stations: result.ok ? result.value : [],
-          error: result.ok ? "" : result.error.message,
+          error:
+            result.ok || result.error.code === "ABORTED"
+              ? ""
+              : result.error.message,
           loading: false,
         });
     });
     return (): void => controller.abort();
-  }, [lat, lng]);
+  }, [lat, lng, enabled]);
   return state;
 }

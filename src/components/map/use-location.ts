@@ -5,6 +5,7 @@ interface SearchLocation {
   center: Point;
   location: string;
   status: string;
+  resolved: boolean;
   choose: (point: Point, name: string) => void;
   locate: () => void;
 }
@@ -12,16 +13,19 @@ export function useLocation(): SearchLocation {
   const [center, setCenter] = useState(HYDERABAD);
   const [location, setLocation] = useState("Hyderabad");
   const [status, setStatus] = useState("Locating you…");
+  const [resolved, setResolved] = useState(false);
   const generation = useRef({ value: 0 });
   const choose = useCallback((point: Point, name: string): void => {
     generation.current.value++;
     setCenter(point);
     setLocation(name);
     setStatus(`Using ${name}`);
+    setResolved(true);
   }, []);
   const locate = useCallback((): void => {
     const current = ++generation.current.value;
     setStatus("Locating you…");
+    setResolved(false);
     const fallback = (): void => {
       if (current === generation.current.value) {
         choose(HYDERABAD, "Hyderabad");
@@ -51,5 +55,5 @@ export function useLocation(): SearchLocation {
       counter.value++;
     };
   }, [locate]);
-  return { center, location, status, choose, locate };
+  return { center, location, status, resolved, choose, locate };
 }

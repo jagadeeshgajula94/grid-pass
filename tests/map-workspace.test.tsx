@@ -13,6 +13,7 @@ import { MapWorkspace } from "../src/components/map/MapWorkspace";
 import { useLocation } from "../src/components/map/use-location";
 import { useStations } from "../src/components/map/use-stations";
 import type { StationDto } from "../src/domain/station";
+import { StrictMode } from "react";
 
 vi.mock("next/dynamic", () => ({ default: () => (): null => null }));
 vi.mock("next/navigation", () => ({
@@ -45,6 +46,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   localStorage.clear();
+  Object.defineProperty(navigator, "geolocation", {
+    configurable: true,
+    value: undefined,
+  });
 });
 it("falls back when geolocation is missing and ignores obsolete requests", () => {
   const { result } = renderHook(() => useLocation());
@@ -114,4 +119,59 @@ it("shows safe errors and an empty list when fetching fails", async () => {
     "Connection unavailable",
   );
   expect(screen.getByText(/No stations match/)).toBeInTheDocument();
+});
+it.each([false, true])(
+  "sends one startup request after the fallback resolves (StrictMode: %s)",
+  async (strict) => {
+    const fetcher = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(response()));
+    vi.stubGlobal("fetch", fetcher);
+    const workspace = <MapWorkspace firstName="Aarav" />;
+    render(strict ? <StrictMode>{workspace}</StrictMode> : workspace);
+    await screen.findByText("City Charge");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0]?.[1].signal.aborted).toBe(false);
+  },
+);
+it.each(["success", "denied", "timeout"])(
+  "waits for geolocation before fetching (%s)",
+  async (outcome) => {
+    const getCurrentPosition = vi.fn();
+    Object.defineProperty(navigator, "geolocation", {
+      configurable: true,
+      value: { getCurrentPosition },
+    });
+    const fetcher = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(response()));
+    vi.stubGlobal("fetch", fetcher);
+    render(
+      <StrictMode>
+        <MapWorkspace firstName="Aarav" />
+      </StrictMode>,
+    );
+    expect(fetcher).not.toHaveBeenCalled();
+    const callbacks = getCurrentPosition.mock.calls.at(-1);
+    expect(callbacks?.[2]).toMatchObject({ timeout: 5000 });
+    act(() => {
+      if (outcome === "success")
+        callbacks?.[0]({ coords: { latitude: 13, longitude: 80 } });
+      else callbacks?.[1]({ code: outcome === "denied" ? 1 : 3 });
+    });
+    await screen.findByText("City Charge");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0]?.[0]).toContain(
+      outcome === "success" ? "lat=13&lng=80" : "lat=17.385&lng=78.4867",
+    );
+  },
+);
+it("does not expose aborted requests as UI errors", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockRejectedValue(new DOMException("Aborted", "AbortError")),
+  );
+  const { result } = renderHook(() => useStations({ lat: 17, lng: 78 }));
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  expect(result.current.error).toBe("");
 });

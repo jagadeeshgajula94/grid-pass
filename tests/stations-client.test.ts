@@ -59,3 +59,15 @@ it("classifies malformed JSON as a safe validation error", async () => {
     error: { code: "VALIDATION", message: "Station data unavailable." },
   });
 });
+it("classifies an AbortError as expected cancellation", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockRejectedValue(new DOMException("Aborted", "AbortError")),
+  );
+  expect(
+    await fetchStations(center, new AbortController().signal),
+  ).toMatchObject({
+    ok: false,
+    error: { code: "ABORTED", message: "Station request canceled." },
+  });
+});

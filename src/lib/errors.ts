@@ -3,6 +3,7 @@ export type ErrorCode =
   | "EMAIL_TAKEN"
   | "INVALID_CREDENTIALS"
   | "UNAUTHENTICATED"
+  | "ABORTED"
   | "UPSTREAM_UNAVAILABLE";
 
 export class AppError extends Error {
