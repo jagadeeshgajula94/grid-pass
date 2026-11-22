@@ -133,6 +133,58 @@ beforeEach(() => {
   state.fail = false;
 });
 afterEach(cleanup);
+it("starts attribution collapsed after loading and leaves its disclosure operable", () => {
+  render(
+    <MapCanvas
+      center={center}
+      light={false}
+      stations={[]}
+      selected={null}
+      onSelect={vi.fn()}
+    />,
+  );
+  const attribution = document.createElement("details");
+  attribution.className = "maplibregl-ctrl-attrib maplibregl-compact-show";
+  attribution.open = true;
+  screen.getByLabelText("Charging stations map").append(attribution);
+  emit("load");
+  expect(attribution.open).toBe(false);
+  expect(attribution).not.toHaveClass("maplibregl-compact-show");
+  attribution.open = true;
+  emit("style.load");
+  expect(attribution.open).toBe(true);
+});
+it.each([150, 422, 764])(
+  "fits phone routes clear of controls and a %i px sheet",
+  (sheetHeight) => {
+    vi.stubGlobal("innerWidth", 390);
+    vi.stubGlobal("innerHeight", 844);
+    render(
+      <MapCanvas
+        center={center}
+        light={false}
+        stations={[]}
+        selected={null}
+        onSelect={vi.fn()}
+        corridor
+        route={corridorFixture.route}
+        sheetHeight={sheetHeight}
+      />,
+    );
+    expect(state.fitBounds).toHaveBeenLastCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        padding: {
+          left: 48,
+          right: 96,
+          top: Math.min(100, Math.max(24, (844 - sheetHeight) * 0.2)),
+          bottom: sheetHeight + 24,
+        },
+      }),
+    );
+    vi.unstubAllGlobals();
+  },
+);
 it("fits above the measured phone sheet and updates padding on resize", () => {
   vi.stubGlobal("innerWidth", 390);
   vi.stubGlobal("innerHeight", 844);
@@ -150,7 +202,7 @@ it("fits above the measured phone sheet and updates padding on resize", () => {
   expect(state.fitBounds).toHaveBeenLastCalledWith(
     expect.any(Array),
     expect.objectContaining({
-      padding: { left: 30, right: 30, top: 100, bottom: 446 },
+      padding: { left: 48, right: 96, top: 84.4, bottom: 446 },
       duration: 0,
     }),
   );

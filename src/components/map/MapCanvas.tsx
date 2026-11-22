@@ -35,6 +35,11 @@ function styleUrl(light: boolean): string {
 function mapStyle(height = 150): CSSProperties {
   return { "--sheet-offset": `${height + 12}px` } as CSSProperties;
 }
+function collapseAttribution(container: HTMLElement | null): void {
+  const attribution = container?.querySelector(".maplibregl-ctrl-attrib");
+  attribution?.classList.remove("maplibregl-compact-show");
+  attribution?.removeAttribute("open");
+}
 function UserPosition({
   map,
   center,
@@ -84,7 +89,10 @@ function useMap(): {
           "Map tiles unavailable. You can still browse nearby stations.",
         ),
       );
-      instance.on("load", () => setError(""));
+      instance.on("load", () => {
+        collapseAttribution(container.current);
+        setError("");
+      });
       setMap(instance);
       return (): void => {
         instance.remove();
@@ -136,9 +144,7 @@ function useVisibleMap(map: MapLibreMap | null, props: CanvasProps): void {
         corridor && route
           ? routeBounds(route.coordinates, 1)
           : boundingBox(center.lat, center.lng, 5);
-      const bottom = desktop
-        ? 40
-        : Math.min(sheetHeight + 24, window.innerHeight * 0.6);
+      const bottom = desktop ? 40 : sheetHeight + 24;
       map.fitBounds(
         [
           [box.west, box.south],
@@ -146,9 +152,14 @@ function useVisibleMap(map: MapLibreMap | null, props: CanvasProps): void {
         ],
         {
           padding: {
-            left: desktop ? 424 : 30,
-            right: desktop ? 80 : 30,
-            top: desktop ? 80 : 100,
+            left: desktop ? 424 : 48,
+            right: desktop ? 80 : 96,
+            top: desktop
+              ? 80
+              : Math.min(
+                  100,
+                  Math.max(24, (window.innerHeight - sheetHeight) * 0.2),
+                ),
             bottom,
           },
           duration: window.matchMedia?.("(prefers-reduced-motion: reduce)")

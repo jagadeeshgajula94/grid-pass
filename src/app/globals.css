@@ -279,7 +279,6 @@
   font-size: 13px;
   padding: 8px 0;
 }
-.origin-hint,
 .range-context {
   color: var(--muted);
   font-size: 12px;
@@ -751,16 +750,40 @@
 .map-workspace .maplibregl-ctrl-group {
   display: none;
 }
+.map-workspace .maplibregl-ctrl-attrib.maplibregl-compact {
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  min-height: 44px;
+  padding: 0 44px 0 0;
+  border-radius: 16px;
+}
+.map-workspace .maplibregl-ctrl-attrib.maplibregl-compact-show {
+  padding: 4px 44px 4px 4px;
+}
+.map-workspace .maplibregl-ctrl-attrib-button {
+  width: 44px;
+  height: 44px;
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: invert(1);
+}
+.light .map-workspace .maplibregl-ctrl-attrib-button {
+  filter: none;
+}
+.map-workspace .maplibregl-ctrl-attrib a {
+  color: inherit;
+}
 @media (max-width: 767px) {
-  .map-workspace:has(.bottom-sheet[data-snap="full"])
-    .maplibregl-ctrl-bottom-right {
+  .map-workspace .maplibregl-ctrl-bottom-right {
     bottom: auto;
     top: max(16px, env(safe-area-inset-top));
     right: 72px;
   }
-  .map-workspace:has(.bottom-sheet[data-snap="full"]) .maplibregl-ctrl-attrib {
-    box-sizing: border-box;
-    max-width: calc(100vw - 230px);
+  .map-workspace .maplibregl-ctrl-attrib {
+    max-width: calc(100vw - 220px);
     font-size: 10px;
     line-height: 12px;
   }

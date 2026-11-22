@@ -108,7 +108,6 @@ function ExpandedSearch({
       <button className="current-location" onClick={props.onCurrent}>
         ◎ Current location
       </button>
-      <p className="origin-hint">{props.originName}</p>
     </div>
   );
 }

@@ -20,6 +20,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
 }));
 const STATION_NAME = "City Charge";
+const FALLBACK_ORIGIN = "Hyderabad — location unavailable";
 const station: StationDto = {
   id: "one",
   name: STATION_NAME,
@@ -113,12 +114,13 @@ it("loads the workspace, selects stations, syncs themes and locates again", asyn
     screen.getByRole("button", { name: "Search a place or route" }),
   );
   expect(screen.getByRole("combobox", { name: "Origin" })).toHaveValue(
-    "Hyderabad — location unavailable",
+    FALLBACK_ORIGIN,
   );
   expect(
     screen.getByRole("region", { name: "Explore charging" }),
   ).toHaveAttribute("data-snap", "full");
   expect(screen.getByRole("combobox", { name: "Origin" })).toHaveFocus();
+  expect(screen.queryByText(FALLBACK_ORIGIN)).toBeNull();
 });
 it("shows safe errors and an empty list when fetching fails", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
@@ -176,9 +178,7 @@ it.each(["success", "denied", "timeout"])(
       screen.getByRole("button", { name: "Search a place or route" }),
     );
     expect(screen.getByRole("combobox", { name: "Origin" })).toHaveValue(
-      outcome === "success"
-        ? "Current location"
-        : "Hyderabad — location unavailable",
+      outcome === "success" ? "Current location" : FALLBACK_ORIGIN,
     );
   },
 );
