@@ -138,17 +138,9 @@ function useMap(): {
 function RecommendationHighlight({
   map,
   station,
-  sheetHeight = 150,
-  area = false,
-  request = 0,
-  intent = 0,
 }: {
   map: MapLibreMap;
   station: StationDto;
-  sheetHeight?: number;
-  area?: boolean;
-  request?: number;
-  intent?: number;
 }): ReactElement {
   const [element] = useState(() => document.createElement("div"));
   useEffect(() => {
@@ -160,7 +152,6 @@ function RecommendationHighlight({
       marker.remove();
     };
   }, [map, station, element]);
-  useRecommendationCamera(map, { station, sheetHeight, area, request, intent });
   return createPortal(
     <div
       className="recommendation-halo"
@@ -170,38 +161,23 @@ function RecommendationHighlight({
     element,
   );
 }
-interface RecommendationCameraTarget {
-  station: StationDto;
-  sheetHeight: number;
-  area: boolean;
-  request: number;
-  intent: number;
-}
-function useRecommendationCamera(
+function flyToPreview(
   map: MapLibreMap,
-  { station, sheetHeight, area, request, intent }: RecommendationCameraTarget,
+  station: StationDto,
+  props: CanvasProps,
 ): void {
-  const previous = useRef({ request, intent, consumed: false });
-  useEffect(() => {
-    if (previous.current.request !== request)
-      previous.current = { request, intent, consumed: false };
-    const preview = previous.current;
-    if (preview.consumed || preview.intent !== intent) return;
-    const timer = window.setTimeout(() => {
-      preview.consumed = true;
-      map.flyTo(
-        {
-          ...cameraMotion(),
-          center: [station.lng, station.lat],
-          zoom: 15,
-          padding: visibleMapPadding(sheetHeight),
-          offset: [0, 0],
-        },
-        area ? { recommendationAreaMove: true } : undefined,
-      );
-    }, 100);
-    return (): void => window.clearTimeout(timer);
-  }, [map, station, sheetHeight, area, request, intent]);
+  map.flyTo(
+    {
+      ...cameraMotion(),
+      center: [station.lng, station.lat],
+      zoom: 15,
+      padding: visibleMapPadding(props.sheetHeight ?? 150),
+      offset: [0, 0],
+    },
+    props.area && !props.corridor
+      ? { recommendationAreaMove: true }
+      : undefined,
+  );
 }
 function useMapView(map: MapLibreMap | null, props: CanvasProps): void {
   const {
@@ -257,6 +233,8 @@ interface OverviewState {
   layout: string;
   selected: boolean;
   highlighted: boolean;
+  highlightRequest: number;
+  fitRequest: number;
 }
 function overviewLayout(sheetHeight = 150): string {
   return JSON.stringify([
@@ -280,6 +258,8 @@ function overviewState(map: MapLibreMap, props: CanvasProps): OverviewState {
     layout: overviewLayout(props.sheetHeight),
     selected: !!props.selected,
     highlighted: !!props.highlighted,
+    highlightRequest: props.highlightRequest ?? 0,
+    fitRequest: props.fitRequest ?? 0,
   };
 }
 function needsOverview(
@@ -316,21 +296,89 @@ function fitOverview(map: MapLibreMap, props: CanvasProps): void {
     },
   );
 }
+interface PreviewIntent {
+  station: StationDto;
+  layout: string | null;
+}
+interface CameraState {
+  previous: OverviewState | null;
+  preview: PreviewIntent | null;
+  timer?: number;
+}
+function updatePreview(
+  state: CameraState,
+  props: CanvasProps,
+  current: OverviewState,
+): void {
+  const previous = state.previous;
+  if (
+    props.highlighted &&
+    (previous?.map !== current.map ||
+      !previous.highlighted ||
+      previous.highlightRequest !== current.highlightRequest)
+  ) {
+    state.preview = { station: props.highlighted, layout: null };
+  } else if (
+    !props.highlighted ||
+    previous?.fitRequest !== current.fitRequest ||
+    (!current.area && previous?.intent !== current.intent)
+  ) {
+    state.preview = null;
+  }
+}
+function schedulePreview(
+  map: MapLibreMap,
+  props: CanvasProps,
+  current: OverviewState,
+  state: CameraState,
+): void {
+  const preview = state.preview;
+  if (!preview || preview.layout === current.layout) return;
+  state.timer = window.setTimeout(() => {
+    if (state.preview !== preview) return;
+    preview.layout = current.layout;
+    flyToPreview(map, preview.station, props);
+  }, 100);
+}
+function updateCamera(
+  map: MapLibreMap,
+  props: CanvasProps,
+  state: CameraState,
+): void {
+  const current = overviewState(map, props);
+  updatePreview(state, props, current);
+  window.clearTimeout(state.timer);
+  if (state.preview && !current.selected)
+    schedulePreview(map, props, current, state);
+  else if (needsOverview(state.previous, current)) fitOverview(map, props);
+  state.previous = current;
+}
 function useVisibleMap(map: MapLibreMap | null, props: CanvasProps): void {
-  const previous = useRef<OverviewState | null>(null);
+  const camera = useRef<CameraState>({ previous: null, preview: null });
+  useLayoutEffect(() => {
+    if (!map) return;
+    const state = camera.current;
+    const start = (event: { originalEvent?: unknown } = {}): void => {
+      if (!event.originalEvent) return;
+      state.preview = null;
+      window.clearTimeout(state.timer);
+    };
+    map.on("movestart", start);
+    return (): void => {
+      map.off("movestart", start);
+      window.clearTimeout(state.timer);
+    };
+  }, [map]);
   useEffect(() => {
     if (!map) return;
-    const current = overviewState(map, props);
-    if (needsOverview(previous.current, current)) fitOverview(map, props);
-    previous.current = current;
-    const resize = (): void => {
-      const layout = overviewLayout(props.sheetHeight);
-      if (current.layout === layout) return;
-      current.layout = layout;
-      if (!current.selected && !current.area) fitOverview(map, props);
+    const state = camera.current;
+    const update = (): void => updateCamera(map, props, state);
+    update();
+    window.addEventListener("resize", update);
+    return (): void => {
+      window.removeEventListener("resize", update);
+      window.clearTimeout(state.timer);
     };
-    window.addEventListener("resize", resize);
-    return (): void => window.removeEventListener("resize", resize);
   }, [map, props]);
 }
 function exposedMapBounds(
@@ -441,14 +489,7 @@ export function MapCanvas(props: CanvasProps): ReactElement {
             />
           )}
           {props.highlighted && (
-            <RecommendationHighlight
-              map={map}
-              station={props.highlighted}
-              sheetHeight={props.sheetHeight}
-              area={props.area && !corridor}
-              request={props.highlightRequest}
-              intent={props.fitRequest}
-            />
+            <RecommendationHighlight map={map} station={props.highlighted} />
           )}
           <MapStationMarkers
             map={map}
