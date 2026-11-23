@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactElement,
@@ -137,10 +138,12 @@ function RecommendationHighlight({
   map,
   station,
   sheetHeight = 150,
+  area = false,
 }: {
   map: MapLibreMap;
   station: StationDto;
   sheetHeight?: number;
+  area?: boolean;
 }): ReactElement {
   const [element] = useState(() => document.createElement("div"));
   useEffect(() => {
@@ -153,14 +156,17 @@ function RecommendationHighlight({
     };
   }, [map, station, element]);
   useEffect(() => {
-    map.flyTo({
-      ...cameraMotion(),
-      center: [station.lng, station.lat],
-      zoom: 15,
-      padding: visibleMapPadding(sheetHeight),
-      offset: [0, 0],
-    });
-  }, [map, station, sheetHeight]);
+    map.flyTo(
+      {
+        ...cameraMotion(),
+        center: [station.lng, station.lat],
+        zoom: 15,
+        padding: visibleMapPadding(sheetHeight),
+        offset: [0, 0],
+      },
+      area ? { recommendationAreaMove: true } : undefined,
+    );
+  }, [map, station, sheetHeight, area]);
   return createPortal(
     <div
       className="recommendation-halo"
@@ -320,28 +326,61 @@ function exposedMapBounds(
     north: Math.max(...points.map((point) => point.lat)),
   };
 }
+interface AreaMoveEvent {
+  originalEvent?: unknown;
+  recommendationAreaMove?: boolean;
+}
+function listenForAreaMoves(
+  map: MapLibreMap,
+  onArea: NonNullable<CanvasProps["onArea"]>,
+  area: boolean,
+  sheetHeight: () => number,
+): () => void {
+  let userMove = false;
+  let pending: number | undefined;
+  const cancel = (): void => window.clearTimeout(pending);
+  const refresh = (): void =>
+    onArea(exposedMapBounds(map, visibleMapPadding(sheetHeight())));
+  const start = (event: AreaMoveEvent = {}): void => {
+    cancel();
+    userMove = !!event.originalEvent;
+  };
+  const finish = (event: AreaMoveEvent = {}): void => {
+    const user =
+      userMove ||
+      !!event.originalEvent ||
+      (area && event.recommendationAreaMove === true);
+    userMove = false;
+    if (!user) return;
+    cancel();
+    if (event.recommendationAreaMove) pending = window.setTimeout(refresh, 400);
+    else refresh();
+  };
+  map.on("movestart", start);
+  map.on("moveend", finish);
+  return (): void => {
+    cancel();
+    map.off("movestart", start);
+    map.off("moveend", finish);
+  };
+}
 function useMapAreaEvents(map: MapLibreMap | null, props: CanvasProps): void {
-  const userMove = useRef(false);
-  const { onArea, corridor, fitRequest, selected, sheetHeight = 150 } = props;
+  const {
+    onArea,
+    corridor,
+    area,
+    fitRequest,
+    selected,
+    sheetHeight = 150,
+  } = props;
+  const height = useRef(sheetHeight);
   useEffect(() => {
-    userMove.current = false;
-    if (!map) return;
-    const start = (event: { originalEvent?: unknown } = {}): void => {
-      userMove.current = !!event.originalEvent;
-    };
-    const finish = (event: { originalEvent?: unknown } = {}): void => {
-      const user = userMove.current || !!event.originalEvent;
-      userMove.current = false;
-      if (!user || corridor || !onArea) return;
-      onArea(exposedMapBounds(map, visibleMapPadding(sheetHeight)));
-    };
-    map.on("movestart", start);
-    map.on("moveend", finish);
-    return (): void => {
-      map.off("movestart", start);
-      map.off("moveend", finish);
-    };
-  }, [map, onArea, corridor, fitRequest, selected, sheetHeight]);
+    height.current = sheetHeight;
+  }, [sheetHeight]);
+  useLayoutEffect(() => {
+    if (!map || corridor || !onArea) return;
+    return listenForAreaMoves(map, onArea, !!area, () => height.current);
+  }, [map, onArea, corridor, area, fitRequest, selected]);
 }
 export function MapCanvas(props: CanvasProps): ReactElement {
   const { stations, onSelect, corridor = false } = props;
@@ -376,6 +415,7 @@ export function MapCanvas(props: CanvasProps): ReactElement {
               map={map}
               station={props.highlighted}
               sheetHeight={props.sheetHeight}
+              area={props.area && !corridor}
             />
           )}
           <MapStationMarkers

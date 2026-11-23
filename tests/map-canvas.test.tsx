@@ -155,11 +155,15 @@ function emit(event: string, payload?: { originalEvent?: Event }): void {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  state.flyTo.mockReset();
   state.handlers.clear();
   state.zoom = 12;
   state.fail = false;
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 it("starts attribution collapsed after loading and leaves its disclosure operable", () => {
   render(
     <MapCanvas
@@ -784,6 +788,88 @@ it("expands corridor clusters to route-numbered pins with the original selection
   unmount();
   expect(state.handlers.get("moveend")?.size).toBe(0);
 });
+it.each([
+  ["area", true, false, 1],
+  ["radar", false, false, 0],
+  ["route", true, true, 0],
+] as const)(
+  "refreshes assistant %s bounds only after the highlight camera settles",
+  (_mode, area, corridor, count) => {
+    vi.useFakeTimers();
+    const onArea = vi.fn();
+    const props = {
+      center,
+      light: false,
+      stations: [station],
+      selected: null,
+      onSelect: vi.fn(),
+      onArea,
+      area,
+      corridor,
+    };
+    const { rerender, unmount } = render(
+      <MapCanvas {...props} sheetHeight={422} />,
+    );
+    let movement:
+      { originalEvent?: Event; recommendationAreaMove?: boolean } | undefined;
+    state.flyTo.mockImplementation(
+      (_options: unknown, eventData?: typeof movement) => {
+        if (movement)
+          for (const handler of state.handlers.get("moveend") ?? [])
+            handler(movement);
+        movement = eventData;
+        for (const handler of state.handlers.get("movestart") ?? [])
+          handler(eventData);
+      },
+    );
+    rerender(<MapCanvas {...props} sheetHeight={422} highlighted={station} />);
+    expect(onArea).not.toHaveBeenCalled();
+    rerender(<MapCanvas {...props} sheetHeight={450} highlighted={station} />);
+    expect(onArea).not.toHaveBeenCalled();
+    state.unproject.mockClear();
+    emit("moveend", movement);
+    expect(onArea).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(400));
+    expect(onArea).toHaveBeenCalledTimes(count);
+    expect(state.unproject).toHaveBeenCalledTimes(count * 4);
+    emit("moveend");
+    expect(onArea).toHaveBeenCalledTimes(count);
+    emit("movestart", movement);
+    emit("moveend", movement);
+    unmount();
+    act(() => vi.advanceTimersByTime(400));
+    expect(onArea).toHaveBeenCalledTimes(count);
+  },
+);
+it("refreshes an area highlight that finishes immediately as the map becomes ready", () => {
+  vi.useFakeTimers();
+  const onArea = vi.fn();
+  state.flyTo.mockImplementation(
+    (
+      _options: unknown,
+      eventData?: { originalEvent?: Event; recommendationAreaMove?: boolean },
+    ) => {
+      for (const type of ["movestart", "moveend"])
+        for (const handler of state.handlers.get(type) ?? [])
+          handler(eventData);
+    },
+  );
+  render(
+    <MapCanvas
+      center={center}
+      light={false}
+      stations={[station]}
+      selected={null}
+      onSelect={vi.fn()}
+      onArea={onArea}
+      area
+      highlighted={station}
+    />,
+  );
+  expect(onArea).not.toHaveBeenCalled();
+  act(() => vi.advanceTimersByTime(400));
+  expect(onArea).toHaveBeenCalledOnce();
+});
 it.each([false, true])(
   "flies to and highlights an assistant result above the current sheet, reduced motion %s",
   (reduced) => {
@@ -814,12 +900,14 @@ it.each([false, true])(
         padding: { left: 48, right: 96, top: 84.4, bottom: 446 },
         offset: [0, 0],
       }),
+      { recommendationAreaMove: true },
     );
     rerender(<MapCanvas {...props} sheetHeight={764} highlighted={station} />);
     expect(state.flyTo).toHaveBeenLastCalledWith(
       expect.objectContaining({
         padding: { left: 48, right: 96, top: 24, bottom: 788 },
       }),
+      { recommendationAreaMove: true },
     );
     rerender(<MapCanvas {...props} sheetHeight={422} />);
     expect(state.fitBounds).not.toHaveBeenCalled();
