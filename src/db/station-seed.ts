@@ -1,4 +1,9 @@
-import { NETWORKS, NETWORK_LABELS, type StationDto } from "../domain/station";
+import {
+  NETWORKS,
+  NETWORK_LABELS,
+  type ConnectorDto,
+  type StationDto,
+} from "../domain/station";
 import { LANDMARK_SEED } from "./landmark-seed";
 
 const CITIES = [
@@ -45,6 +50,15 @@ const CITIES = [
     lng: 77.209,
     areas: ["Connaught Place", "Karol Bagh", "Lodhi Road"],
   },
+];
+const NORTHWEST_HYDERABAD = [
+  { name: "Nizampet", lat: 17.519, lng: 78.382 },
+  { name: "Bachupally", lat: 17.544, lng: 78.363 },
+  { name: "Miyapur", lat: 17.4933, lng: 78.3579 },
+  { name: "KPHB", lat: 17.4938, lng: 78.3998 },
+  { name: "Kukatpally", lat: 17.4849, lng: 78.4138 },
+  { name: "Pragathi Nagar", lat: 17.5184, lng: 78.3977 },
+  { name: "Hitech City", lat: 17.4483, lng: 78.3808 },
 ];
 const CORRIDORS = [
   {
@@ -133,6 +147,30 @@ function addHighwayStations(
     );
   }
 }
+function addNorthwestHyderabadStations(
+  stations: StationDto[],
+  random: () => number,
+): void {
+  for (const [index, area] of NORTHWEST_HYDERABAD.entries()) {
+    const hub = station(
+      index % 5,
+      area.lat,
+      area.lng,
+      `${area.name} Charging Hub, Hyderabad`,
+      random,
+    );
+    stations.push({
+      ...hub,
+      id: `local-${stations.length}`,
+      connectors: hub.connectors.map<ConnectorDto>((connector) => ({
+        ...connector,
+        type: "CCS2",
+        powerKw: 30 + (index % 4) * 30,
+        status: index % 3 === 0 ? "busy" : "available",
+      })),
+    });
+  }
+}
 function generateStations(): StationDto[] {
   const random = seededRandom();
   const stations: StationDto[] = [];
@@ -169,6 +207,7 @@ function generateStations(): StationDto[] {
     }
   }
   addHighwayStations(stations, random);
+  addNorthwestHyderabadStations(stations, random);
   return stations;
 }
 export const STATION_SEED: readonly StationDto[] = generateStations();

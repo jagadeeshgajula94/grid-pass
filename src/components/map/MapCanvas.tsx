@@ -15,12 +15,22 @@ import {
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { StationDto } from "../../domain/station";
-import { boundingBox, routeBounds, type Point } from "../../lib/geo";
+import {
+  boundingBox,
+  routeBounds,
+  type BoundingBox,
+  type Point,
+} from "../../lib/geo";
 import { StationMarkers } from "./StationMarkers";
-import { updateRoute } from "./map-layers";
+import { cameraMotion, updateAccuracy, updateRoute } from "./map-layers";
 import type { RouteSummaryDto } from "../../domain/route";
 import { CorridorMarkers } from "./CorridorMarkers";
 interface CanvasProps {
+  position?: Point | null;
+  accuracy?: number | null;
+  radiusKm?: number;
+  area?: boolean;
+  onArea?: (bounds: BoundingBox) => void;
   fitRequest?: number;
   sheetHeight?: number;
   corridor?: boolean;
@@ -45,12 +55,15 @@ function collapseAttribution(container: HTMLElement | null): void {
 function UserPosition({
   map,
   center,
+  accuracy,
 }: {
   map: MapLibreMap;
   center: Point;
+  accuracy?: number | null;
 }): ReactElement {
   const [element] = useState(() => document.createElement("div"));
   useEffect(() => {
+    element.className = "user-location-marker";
     const marker = new Marker({ element })
       .setLngLat([center.lng, center.lat])
       .addTo(map);
@@ -59,7 +72,19 @@ function UserPosition({
     };
   }, [map, center, element]);
   return createPortal(
-    <div className="user-position" role="img" aria-label="Search center" />,
+    <div
+      className="user-position"
+      role="img"
+      aria-label={
+        accuracy != null && accuracy > 1000
+          ? "Your approximate location"
+          : "Your location"
+      }
+    >
+      {accuracy != null && accuracy > 1000 && (
+        <span className="position-caption">Approximate</span>
+      )}
+    </div>,
     element,
   );
 }
@@ -107,36 +132,44 @@ function useMap(): {
   }, []);
   return { container, map, error };
 }
-function useMapView(
-  map: MapLibreMap | null,
-  center: Point,
-  light: boolean,
-  selected: StationDto | null,
-  corridor: boolean,
-  route?: RouteSummaryDto,
-): void {
+function useMapView(map: MapLibreMap | null, props: CanvasProps): void {
+  const {
+    center,
+    light,
+    selected,
+    corridor = false,
+    route,
+    area,
+    radiusKm,
+    position,
+    accuracy,
+  } = props;
   useEffect(() => {
     map?.setStyle(styleUrl(light));
   }, [map, light]);
   useEffect(() => {
     if (!map) return;
-    const draw = (): void => updateRoute(map, corridor, center, route);
+    const draw = (): void => {
+      updateRoute(map, corridor, center, route, { area, radiusKm });
+      updateAccuracy(map, position, accuracy);
+    };
     map.on("style.load", draw);
     if (map.isStyleLoaded()) draw();
     return (): void => {
       map.off("style.load", draw);
     };
-  }, [map, center, corridor, route]);
+  }, [map, center, corridor, route, area, radiusKm, position, accuracy]);
   useEffect(() => {
     if (map && selected)
       map.flyTo({
+        ...cameraMotion(),
         center: [selected.lng, selected.lat],
         zoom: 15,
         offset: window.innerWidth >= 768 ? [190, 0] : [0, -150],
       });
   }, [map, selected, route, corridor]);
 }
-function visibleMapPadding(sheetHeight: number): PaddingOptions {
+function visibleMapPadding(sheetHeight: number): Required<PaddingOptions> {
   if (window.innerWidth >= 768)
     return { left: 424, right: 80, top: 80, bottom: 40 };
   return {
@@ -147,6 +180,7 @@ function visibleMapPadding(sheetHeight: number): PaddingOptions {
   };
 }
 interface OverviewState {
+  area: boolean;
   map: MapLibreMap;
   intent: string;
   layout: string;
@@ -161,6 +195,7 @@ function overviewLayout(sheetHeight = 150): string {
 }
 function overviewState(map: MapLibreMap, props: CanvasProps): OverviewState {
   return {
+    area: props.area ?? false,
     map,
     intent: JSON.stringify([
       props.center.lat,
@@ -168,6 +203,7 @@ function overviewState(map: MapLibreMap, props: CanvasProps): OverviewState {
       props.corridor ?? false,
       props.corridor ? props.route : null,
       props.fitRequest ?? 0,
+      props.radiusKm ?? 5,
     ]),
     layout: overviewLayout(props.sheetHeight),
     selected: !!props.selected,
@@ -181,9 +217,11 @@ function needsOverview(
     !next.selected &&
     (!previous ||
       previous.map !== next.map ||
-      previous.intent !== next.intent ||
-      previous.layout !== next.layout ||
-      previous.selected)
+      (!next.area &&
+        (previous.selected ||
+          previous.area ||
+          previous.intent !== next.intent ||
+          previous.layout !== next.layout)))
   );
 }
 function fitOverview(map: MapLibreMap, props: CanvasProps): void {
@@ -191,7 +229,7 @@ function fitOverview(map: MapLibreMap, props: CanvasProps): void {
   const box =
     corridor && route
       ? routeBounds(route.coordinates, 1)
-      : boundingBox(center.lat, center.lng, 5);
+      : boundingBox(center.lat, center.lng, props.radiusKm ?? 5);
   map.fitBounds(
     [
       [box.west, box.south],
@@ -199,9 +237,7 @@ function fitOverview(map: MapLibreMap, props: CanvasProps): void {
     ],
     {
       padding: visibleMapPadding(sheetHeight ?? 150),
-      duration: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-        ? 0
-        : 500,
+      ...cameraMotion(),
       maxZoom: corridor ? 13 : 14,
     },
   );
@@ -217,24 +253,63 @@ function useVisibleMap(map: MapLibreMap | null, props: CanvasProps): void {
       const layout = overviewLayout(props.sheetHeight);
       if (current.layout === layout) return;
       current.layout = layout;
-      if (!current.selected) fitOverview(map, props);
+      if (!current.selected && !current.area) fitOverview(map, props);
     };
     window.addEventListener("resize", resize);
     return (): void => window.removeEventListener("resize", resize);
   }, [map, props]);
 }
+function exposedMapBounds(
+  map: MapLibreMap,
+  padding: Required<PaddingOptions>,
+): BoundingBox {
+  const { clientWidth: width, clientHeight: height } = map.getContainer();
+  const left = Math.min(padding.left, Math.max(0, width - 1));
+  const top = Math.min(padding.top, Math.max(0, height - 1));
+  const right = Math.max(left + 1, width - padding.right);
+  const bottom = Math.max(top + 1, height - padding.bottom);
+  const corners: [number, number][] = [
+    [left, top],
+    [right, top],
+    [left, bottom],
+    [right, bottom],
+  ];
+  const points = corners.map((corner) => map.unproject(corner));
+  return {
+    west: Math.min(...points.map((point) => point.lng)),
+    east: Math.max(...points.map((point) => point.lng)),
+    south: Math.min(...points.map((point) => point.lat)),
+    north: Math.max(...points.map((point) => point.lat)),
+  };
+}
+function useMapAreaEvents(map: MapLibreMap | null, props: CanvasProps): void {
+  const userMove = useRef(false);
+  const { onArea, corridor, fitRequest, selected, sheetHeight = 150 } = props;
+  useEffect(() => {
+    userMove.current = false;
+    if (!map) return;
+    const start = (event: { originalEvent?: unknown } = {}): void => {
+      userMove.current = !!event.originalEvent;
+    };
+    const finish = (event: { originalEvent?: unknown } = {}): void => {
+      const user = userMove.current || !!event.originalEvent;
+      userMove.current = false;
+      if (!user || corridor || !onArea) return;
+      onArea(exposedMapBounds(map, visibleMapPadding(sheetHeight)));
+    };
+    map.on("movestart", start);
+    map.on("moveend", finish);
+    return (): void => {
+      map.off("movestart", start);
+      map.off("moveend", finish);
+    };
+  }, [map, onArea, corridor, fitRequest, selected, sheetHeight]);
+}
 export function MapCanvas(props: CanvasProps): ReactElement {
-  const {
-    center,
-    light,
-    stations,
-    selected,
-    onSelect,
-    corridor = false,
-    route,
-  } = props;
+  const { stations, onSelect, corridor = false } = props;
   const { container, map, error } = useMap();
-  useMapView(map, center, light, selected, corridor, route);
+  useMapAreaEvents(map, props);
+  useMapView(map, props);
   useVisibleMap(map, props);
   return (
     <>
@@ -251,7 +326,13 @@ export function MapCanvas(props: CanvasProps): ReactElement {
       )}
       {map && (
         <>
-          <UserPosition map={map} center={center} />
+          {props.position && (
+            <UserPosition
+              map={map}
+              center={props.position}
+              accuracy={props.accuracy}
+            />
+          )}
           <MapStationMarkers
             map={map}
             stations={stations}

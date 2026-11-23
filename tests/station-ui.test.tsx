@@ -142,9 +142,51 @@ it("selects pins and list rows without a nested sheet handle", () => {
   );
   expect(stationSummary({ ...station, connectors: [] }).status).toBe("offline");
 });
-it("renders an empty station list", () => {
-  render(<StationList stations={[]} onSelect={vi.fn()} />);
-  expect(screen.getByText(/No stations match/)).toBeInTheDocument();
+it.each([
+  {
+    radiusKm: 5,
+    area: false,
+    message: "No chargers match within 5 km. Try 10 km or adjust your filters.",
+  },
+  {
+    radiusKm: 10,
+    area: false,
+    message:
+      "No chargers match within 10 km. Try 20 km or adjust your filters.",
+  },
+  {
+    radiusKm: 20,
+    area: false,
+    message:
+      "No chargers match within 20 km. Try zooming out or moving the map.",
+  },
+  {
+    radiusKm: 2,
+    area: true,
+    message:
+      "No chargers match in this area. Try zooming out or moving the map.",
+  },
+])(
+  "offers contextual empty-list guidance at $radiusKm km (area: $area)",
+  ({ radiusKm, area, message }) => {
+    render(
+      <StationList
+        stations={[]}
+        onSelect={vi.fn()}
+        radiusKm={radiusKm}
+        area={area}
+      />,
+    );
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.getByText(/Local demo data/)).toBeInTheDocument();
+  },
+);
+it("hides empty guidance during loading and after stations arrive", () => {
+  const props = { stations: [], onSelect: vi.fn(), radiusKm: 5 };
+  const { rerender } = render(<StationList {...props} loading />);
+  expect(screen.queryByText(/No chargers match/)).toBeNull();
+  rerender(<StationList {...props} stations={[station]} />);
+  expect(screen.queryByText(/No chargers match/)).toBeNull();
 });
 it("updates all filter controls", () => {
   const onChange = vi.fn();

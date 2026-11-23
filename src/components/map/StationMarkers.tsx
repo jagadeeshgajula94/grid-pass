@@ -1,23 +1,21 @@
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { createPortal } from "react-dom";
 import { Marker, type Map as MapLibreMap } from "maplibre-gl";
-import Supercluster, {
-  type ClusterFeature as SuperclusterFeature,
-  type PointFeature,
-} from "supercluster";
+import Supercluster from "supercluster";
 import type { StationDto } from "../../domain/station";
 import { StationPin } from "./StationPin";
-interface PinProperties {
-  station: StationDto;
-  number: number;
-}
-type ClusterFeature =
-  SuperclusterFeature<Record<string, never>> | PointFeature<PinProperties>;
+import { cameraMotion } from "./map-layers";
+import {
+  collisionGroups,
+  collisionExpansionZoom,
+  type PinProperties,
+  type MarkerGroup,
+} from "./marker-collisions";
 interface MarkerEntry {
   key: string;
   marker: Marker;
   element: HTMLDivElement;
-  feature: ClusterFeature;
+  group: MarkerGroup;
 }
 function clusterIndex(
   stations: StationDto[],
@@ -36,6 +34,7 @@ function clusterIndex(
 function useClusterMarkers(
   map: MapLibreMap,
   index: Supercluster<PinProperties, Record<string, never>>,
+  numbered: boolean,
 ): MarkerEntry[] {
   const [entries, setEntries] = useState<MarkerEntry[]>([]);
   useEffect(() => {
@@ -51,43 +50,53 @@ function useClusterMarkers(
         ],
         Math.floor(map.getZoom()),
       );
-      syncMarkers(map, active, features);
+      syncMarkers(
+        map,
+        active,
+        collisionGroups(
+          features,
+          (point) => projectMarker(map, point),
+          numbered,
+        ),
+      );
       setEntries([...active.values()]);
     };
     update();
     map.on("moveend", update);
+    map.on("move", update);
+    map.on("resize", update);
     return (): void => {
       map.off("moveend", update);
+      map.off("move", update);
+      map.off("resize", update);
       for (const entry of active.values()) entry.marker.remove();
     };
-  }, [map, index]);
+  }, [map, index, numbered]);
   return entries;
 }
 function syncMarkers(
   map: MapLibreMap,
   active: Map<string, MarkerEntry>,
-  features: ClusterFeature[],
+  groups: MarkerGroup[],
 ): void {
   const keys = new Set<string>();
-  for (const feature of features) {
-    const key =
-      "cluster" in feature.properties
-        ? `cluster-${feature.id}`
-        : `station-${feature.properties.station.id}`;
+  for (const group of groups) {
+    const key = group.key;
     keys.add(key);
     let entry = active.get(key);
     if (!entry) {
       const element = document.createElement("div");
-      const [lng = 0, lat = 0] = feature.geometry.coordinates;
+      element.className = "station-marker";
       entry = {
         key,
         element,
-        feature,
-        marker: new Marker({ element }).setLngLat([lng, lat]).addTo(map),
+        group,
+        marker: new Marker({ element }).setLngLat(group.coordinates).addTo(map),
       };
       active.set(key, entry);
     }
-    entry.feature = feature;
+    entry.group = group;
+    entry.marker.setLngLat(group.coordinates);
   }
   for (const [key, entry] of active)
     if (!keys.has(key)) {
@@ -107,7 +116,7 @@ export function StationMarkers({
   numbered?: boolean;
 }): ReactElement {
   const index = useMemo(() => clusterIndex(stations), [stations]);
-  const entries = useClusterMarkers(map, index);
+  const entries = useClusterMarkers(map, index, numbered);
   return (
     <>
       {entries.map((entry) => {
@@ -139,23 +148,29 @@ function MarkerContent({
   onSelect: (station: StationDto) => void;
   numbered: boolean;
 }): ReactElement {
-  const properties = entry.feature.properties;
-  if ("cluster" in properties)
+  const group = entry.group;
+  if (group.count > 1)
     return (
       <button
         className="station-cluster"
-        aria-label={`Zoom into ${properties.point_count} ${numbered ? "stops" : "stations"}`}
-        onClick={() =>
-          map.easeTo({
-            center: entry.marker.getLngLat(),
-            zoom: index.getClusterExpansionZoom(properties.cluster_id),
-          })
+        aria-label={`Zoom into ${group.count} ${numbered ? "stops" : "stations"}`}
+        onClick={(event) =>
+          map.easeTo(
+            {
+              ...cameraMotion(),
+              center: entry.marker.getLngLat(),
+              zoom: expansionZoom(map, index, group, numbered),
+            },
+            { originalEvent: event.nativeEvent },
+          )
         }
       >
-        {properties.point_count}
+        {group.count}
       </button>
     );
-  const { station, number } = properties;
+  const feature = group.features[0];
+  if (!feature || "cluster" in feature.properties) return <></>;
+  const { station, number } = feature.properties;
   return numbered ? (
     <button
       className="corridor-marker"
@@ -167,4 +182,38 @@ function MarkerContent({
   ) : (
     <StationPin station={station} onSelect={onSelect} />
   );
+}
+function expansionZoom(
+  map: MapLibreMap,
+  index: Supercluster<PinProperties, Record<string, never>>,
+  group: MarkerGroup,
+  numbered: boolean,
+): number {
+  let minimum = map.getZoom() + 1;
+  const leaves = group.features.flatMap((feature) => {
+    if (!("cluster" in feature.properties)) return [feature];
+    if (group.features.length === 1)
+      minimum = Math.max(
+        minimum,
+        index.getClusterExpansionZoom(feature.properties.cluster_id),
+      );
+    return index.getLeaves(feature.properties.cluster_id, Infinity);
+  });
+  const points: [number, number][] = leaves.map((leaf) => {
+    const [lng = 0, lat = 0] = leaf.geometry.coordinates;
+    return [lng, lat];
+  });
+  return collisionExpansionZoom(points, (point) => projectMarker(map, point), {
+    zoom: map.getZoom(),
+    maxZoom: map.getMaxZoom(),
+    minimum,
+    numbered,
+  });
+}
+function projectMarker(
+  map: MapLibreMap,
+  [lng, lat]: [number, number],
+): { x: number; y: number } {
+  const wrapped = lng + Math.round((map.getCenter().lng - lng) / 360) * 360;
+  return map.project([wrapped, lat]);
 }

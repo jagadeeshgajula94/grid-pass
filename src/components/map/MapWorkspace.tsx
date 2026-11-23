@@ -26,11 +26,22 @@ import { WorkspaceNotice } from "./WorkspaceNotice";
 import { RoutePlanner } from "./RoutePlanner";
 import { useRoutePlanner } from "./use-route-planner";
 import { useCorridor } from "./use-corridor";
+import { useMapArea } from "./use-map-area";
+import { LocationBanner } from "./LocationBanner";
+import { RadarControls } from "./RoutePlanner";
 const MapCanvas = dynamic(
   () => import("./MapCanvas").then((module) => module.MapCanvas),
   { ssr: false },
 );
+type DiscoveryState = ReturnType<typeof useMapArea> &
+  ReturnType<typeof useStations> & {
+    center: Point;
+    radiusKm: number;
+    radarRadiusKm: number;
+    onRadius: (radiusKm: number) => void;
+  };
 interface WorkspaceState {
+  discovery: DiscoveryState;
   fitRequest: number;
   search: ReturnType<typeof useLocation>;
   planner: Omit<PlannerProps, "evModel" | "route">;
@@ -70,11 +81,14 @@ function requestFitAfter<Args extends unknown[]>(
   };
 }
 function usePlannerIntents(
-  search: ReturnType<typeof useLocation>,
+  planner: WorkspaceState["planner"],
+  resetArea: () => void,
 ): Pick<WorkspaceState, "planner" | "fitRequest"> {
   const [fitRequest, setFitRequest] = useState(0);
-  const requestFit = (): void => setFitRequest((request) => request + 1);
-  const planner = useRoutePlanner(search);
+  const requestFit = (): void => {
+    resetArea();
+    setFitRequest((request) => request + 1);
+  };
   return {
     fitRequest,
     planner: {
@@ -92,51 +106,97 @@ function usePlannerIntents(
     },
   };
 }
-function useWorkspace(): WorkspaceState {
-  const search = useLocation();
-  const { planner, fitRequest } = usePlannerIntents(search);
-  const [light, setLight] = useState(false);
+function useDiscovery(
+  search: ReturnType<typeof useLocation>,
+  routeActive: boolean,
+): DiscoveryState {
+  const [radiusKm, setRadius] = useState(5);
+  const area = useMapArea(!routeActive);
+  const target = area.area ?? { center: search.center, radiusKm };
+  const stations = useStations(
+    target.center,
+    search.resolved && !routeActive,
+    target.radiusKm,
+    area.area ? 400 : 0,
+  );
+  return {
+    ...area,
+    ...target,
+    ...stations,
+    radarRadiusKm: radiusKm,
+    onRadius: (next): void => {
+      if (next === radiusKm && !area.area) return;
+      area.reset();
+      setRadius(next);
+    },
+  };
+}
+function useWorkspaceData(
+  search: ReturnType<typeof useLocation>,
+  planner: WorkspaceState["planner"],
+  discovery: DiscoveryState,
+): Pick<
+  WorkspaceState,
+  | "filters"
+  | "setFilters"
+  | "filtered"
+  | "loading"
+  | "error"
+  | "isCorridor"
+  | "route"
+> {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  const selection = useSelection(
-    search.center,
-    planner.destination,
-    planner.bufferKm,
-    filters,
-  );
-  const nearby = useStations(
-    search.center,
-    search.resolved && !planner.destination,
-  );
   const corridor = useCorridor(
     search.center,
     search.resolved ? planner.destination : null,
     planner.bufferKm,
   );
   const isCorridor = !!planner.destination;
-  const { loading, error } = isCorridor ? corridor : nearby;
+  const { loading, error } = isCorridor ? corridor : discovery;
   const filtered = useMemo(
     () =>
       isCorridor
         ? filterStations(corridor.data?.stations ?? [], filters).sort(
             (a, b) => a.kmAlongRoute - b.kmAlongRoute,
           )
-        : filterStations(nearby.stations, filters),
-    [nearby.stations, corridor.data, filters, isCorridor],
+        : filterStations(discovery.stations, filters),
+    [discovery.stations, corridor.data, filters, isCorridor],
   );
   return {
-    search,
-    fitRequest,
-    planner,
-    light,
-    setLight,
     filters,
     setFilters,
-    ...selection,
     filtered,
     loading,
     error,
     isCorridor,
     route: corridor.data?.route,
+  };
+}
+function useWorkspace(): WorkspaceState {
+  const search = useLocation();
+  const basePlanner = useRoutePlanner(search);
+  const discovery = useDiscovery(search, !!basePlanner.destination);
+  const { planner, fitRequest } = usePlannerIntents(
+    basePlanner,
+    discovery.reset,
+  );
+  const data = useWorkspaceData(search, planner, discovery);
+  const selection = useSelection(
+    discovery.center,
+    planner.destination,
+    planner.bufferKm,
+    data.filters,
+  );
+  const [light, setLight] = useState(false);
+  return {
+    search,
+    planner,
+    fitRequest,
+    discovery,
+    light,
+    setLight,
+    ...data,
+    ...selection,
   };
 }
 function SheetResults({
@@ -166,6 +226,8 @@ function SheetResults({
         corridor={state.isCorridor}
         bufferKm={state.planner.bufferKm}
         loading={state.loading}
+        area={!!state.discovery.area && !state.isCorridor}
+        radiusKm={state.discovery.radiusKm}
       />
     </div>
   );
@@ -186,10 +248,59 @@ interface ContentProps {
   state: WorkspaceState;
   evModel: string;
   sheet: ReturnType<typeof useSheet>;
+  searchRequest?: number;
+  onSearchReady?: () => void;
+}
+function discoverySummary(state: WorkspaceState): string {
+  if (state.isCorridor) return "charging stops along your route";
+  if (state.discovery.area) return "stations · In this area";
+  return `stations nearby · within ${state.discovery.radiusKm} km`;
+}
+function PlannerContent({
+  state,
+  evModel,
+  sheet,
+  searchRequest,
+  onSearchReady,
+}: ContentProps): ReactElement {
+  return (
+    <>
+      <RoutePlanner
+        {...state.planner}
+        evModel={evModel}
+        route={state.route}
+        searchRequest={searchRequest}
+        onSearchReady={onSearchReady}
+        onExpand={() => sheet.setSnap("full")}
+        onDestination={(place): void => {
+          state.planner.onDestination(place);
+          sheet.setSnap("half");
+        }}
+      />
+      {!state.isCorridor && (
+        <RadarControls
+          radiusKm={state.discovery.radarRadiusKm}
+          area={!!state.discovery.area}
+          onRadius={state.discovery.onRadius}
+          onBack={state.planner.onCurrent}
+        />
+      )}
+      <p className="peek-summary" aria-live="polite">
+        {state.filtered.length} {discoverySummary(state)}
+      </p>
+    </>
+  );
 }
 function WorkspaceContent(props: ContentProps): ReactElement {
-  const { state, evModel, sheet } = props;
+  const { state, sheet, searchRequest } = props;
+  const close = state.close;
   const [view, setView] = useState<"list" | "filters">("list");
+  useEffect(() => {
+    if (searchRequest) {
+      setView("list");
+      close();
+    }
+  }, [searchRequest, close]);
   useStationReturnFocus(state.selected);
   const select = (station: StationDto): void => {
     state.setSelected(station);
@@ -208,22 +319,7 @@ function WorkspaceContent(props: ContentProps): ReactElement {
     );
   return (
     <>
-      <RoutePlanner
-        {...state.planner}
-        evModel={evModel}
-        route={state.route}
-        onExpand={() => sheet.setSnap("full")}
-        onDestination={(place): void => {
-          state.planner.onDestination(place);
-          sheet.setSnap("half");
-        }}
-      />
-      <p className="peek-summary" aria-live="polite">
-        {state.filtered.length}{" "}
-        {state.isCorridor
-          ? "charging stops along your route"
-          : "stations nearby · within 5 km"}
-      </p>
+      <PlannerContent {...props} />
       <SheetResults
         state={state}
         onSelect={select}
@@ -233,6 +329,37 @@ function WorkspaceContent(props: ContentProps): ReactElement {
         }}
       />
     </>
+  );
+}
+function WorkspaceMap({
+  state,
+  sheet,
+  sheetHeight,
+}: {
+  state: WorkspaceState;
+  sheet: ReturnType<typeof useSheet>;
+  sheetHeight: number;
+}): ReactElement {
+  return (
+    <MapCanvas
+      fitRequest={state.fitRequest}
+      center={state.discovery.center}
+      position={state.search.position}
+      accuracy={state.search.accuracy}
+      radiusKm={state.discovery.radiusKm}
+      area={!!state.discovery.area && !state.isCorridor}
+      onArea={state.discovery.onArea}
+      light={state.light}
+      stations={state.filtered}
+      selected={state.selected}
+      onSelect={(station): void => {
+        state.setSelected(station);
+        sheet.setSnap("half");
+      }}
+      corridor={state.isCorridor}
+      route={state.route}
+      sheetHeight={sheetHeight}
+    />
   );
 }
 export function MapWorkspace({
@@ -245,22 +372,11 @@ export function MapWorkspace({
   const state = useWorkspace();
   const sheet = useSheet();
   const [sheetHeight, setSheetHeight] = useState(150);
+  const [searchRequest, setSearchRequest] = useState(0);
+  const searchReady = useCallback((): void => setSearchRequest(0), []);
   return (
     <main className="map-workspace">
-      <MapCanvas
-        fitRequest={state.fitRequest}
-        center={state.search.center}
-        light={state.light}
-        stations={state.filtered}
-        selected={state.selected}
-        onSelect={(station): void => {
-          state.setSelected(station);
-          sheet.setSnap("half");
-        }}
-        corridor={state.isCorridor}
-        route={state.route}
-        sheetHeight={sheetHeight}
-      />
+      <WorkspaceMap state={state} sheet={sheet} sheetHeight={sheetHeight} />
       <MapControls
         firstName={firstName}
         onTheme={state.setLight}
@@ -268,7 +384,21 @@ export function MapWorkspace({
         fullSheet={sheet.snap === "full"}
       />
       <BottomSheet sheet={sheet} onHeight={setSheetHeight}>
-        <WorkspaceContent state={state} evModel={evModel} sheet={sheet} />
+        <LocationBanner
+          errorKind={state.search.errorKind}
+          onRetry={state.planner.onCurrent}
+          onSearch={() => {
+            setSearchRequest((request) => request + 1);
+            sheet.setSnap("full");
+          }}
+        />
+        <WorkspaceContent
+          state={state}
+          evModel={evModel}
+          sheet={sheet}
+          searchRequest={searchRequest}
+          onSearchReady={searchReady}
+        />
       </BottomSheet>
     </main>
   );
