@@ -77,6 +77,21 @@ it("chooses route before map area, otherwise area or the selected radar centre/r
     }).success,
   ).toBe(true);
 });
+it("normalizes long geocoded destination names before sending assistant context", () => {
+  const center = { lat: 17.517, lng: 78.385 };
+  const context = assistantContext({
+    planner: {
+      destination: { ...destination, name: `  ${"V".repeat(200)}  ` },
+      bufferKm: 5,
+    },
+    search: { center },
+    discovery: { center, radiusKm: 5, area: null },
+  });
+  expect(context).toMatchObject({ destinationName: "V".repeat(160) });
+  expect(
+    recommendationSchema.safeParse({ batteryPercent: 60, context }).success,
+  ).toBe(true);
+});
 it("opens the assistant, sends radar context, highlights a result and returns focus on Back", async () => {
   mockNizampet();
   const fetcher = vi.fn((url: string, init?: RequestInit) =>

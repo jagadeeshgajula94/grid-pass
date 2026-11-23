@@ -92,6 +92,15 @@ it("does not tell drivers to charge before leaving when viable stops are farther
     "stops en route",
   );
 });
+it("trims and truncates long destination labels rather than blocking recommendations", () => {
+  const destinationName = `  ${"V".repeat(200)}  `;
+  expect(
+    recommendationSchema.parse({
+      ...query,
+      context: { ...query.context, destinationName },
+    }).context,
+  ).toMatchObject({ destinationName: "V".repeat(160) });
+});
 it("uses a neutral destination label for older callers, bounds names, and propagates service errors", async () => {
   mockRoute();
   expect(
@@ -102,7 +111,7 @@ it("uses a neutral destination label for older callers, bounds names, and propag
       })
     ).routeMessage,
   ).toContain("Your destination");
-  for (const destinationName of [" ", "x".repeat(161), 1])
+  for (const destinationName of [" ", 1])
     expect(
       recommendationSchema.safeParse({
         ...query,
