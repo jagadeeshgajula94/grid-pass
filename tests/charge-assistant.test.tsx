@@ -191,6 +191,32 @@ it("rejects invalid response data and handles transport failures and cancellatio
     value: null,
   });
 });
+it("preserves and renders the service's route guidance as its own paragraph", async () => {
+  const guidance = "Vijayawada is ~275 km away; charge before leaving.";
+  mockFetch().mockResolvedValueOnce(
+    Response.json({
+      ...assistantResponse,
+      contextMode: "route",
+      routeMessage: guidance,
+    }),
+  );
+  render(
+    <ChargeAssistant
+      context={{
+        mode: "route",
+        origin: nearbyContext.center,
+        destination: { lat: 16.5062, lng: 80.648 },
+        destinationName: "Vijayawada",
+        bufferKm: 5,
+      }}
+      evModel={NEXON}
+      onBack={vi.fn()}
+      onShow={vi.fn()}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: FIND_STOPS }));
+  expect((await screen.findByText(guidance)).tagName).toBe("P");
+});
 it("clears previous results on a new context and ignores identical remeasurements", async () => {
   mockFetch();
   const reset = vi.fn();

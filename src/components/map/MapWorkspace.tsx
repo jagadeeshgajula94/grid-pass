@@ -381,6 +381,7 @@ export function assistantContext(state: {
       mode: "route",
       origin: { lat: origin.lat, lng: origin.lng },
       destination: { lat: destination.lat, lng: destination.lng },
+      destinationName: destination.name,
       bufferKm: state.planner.bufferKm,
     };
   return {

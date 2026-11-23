@@ -15,6 +15,7 @@ const responseSchema = z.object({
   reachableRangeKm: z.number().nonnegative(),
   approximateRoadDistances: z.boolean(),
   message: z.string().max(500),
+  routeMessage: z.string().max(500).optional(),
   recommendations: z
     .array(
       z.object({

@@ -57,6 +57,7 @@ it("chooses route before map area, otherwise area or the selected radar centre/r
     mode: "route",
     origin: center,
     destination: { lat: destination.lat, lng: destination.lng },
+    destinationName: destination.name,
     bufferKm: 10,
   });
   expect(

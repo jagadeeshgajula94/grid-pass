@@ -10,6 +10,7 @@ export const recommendationSchema = z.strictObject({
       mode: z.literal("route"),
       origin: pointSchema,
       destination: pointSchema,
+      destinationName: z.string().trim().min(1).max(160).optional(),
       bufferKm: z.number().min(1).max(15).default(5),
     }),
     z.strictObject({ mode: z.literal("area"), center: pointSchema, radiusKm }),

@@ -2,7 +2,13 @@ import type { EvModel } from "./ev-models";
 import type { StationDto } from "./station";
 import type { Point } from "../lib/geo";
 export type RecommendationContext =
-  | { mode: "route"; origin: Point; destination: Point; bufferKm: number }
+  | {
+      mode: "route";
+      origin: Point;
+      destination: Point;
+      destinationName?: string;
+      bufferKm: number;
+    }
   | { mode: "area" | "nearby"; center: Point; radiusKm: number };
 export interface RecommendationRequest {
   batteryPercent: number;
@@ -27,4 +33,5 @@ export interface RecommendationDto {
   approximateRoadDistances: boolean;
   recommendations: ChargingRecommendation[];
   message: string;
+  routeMessage?: string;
 }

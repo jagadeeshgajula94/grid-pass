@@ -131,6 +131,7 @@ function AssistantResults({
         {data.recommendations.length ? "Your best stops" : "Nothing reachable"}
       </h3>
       <p>{data.message}</p>
+      {data.routeMessage && <p>{data.routeMessage}</p>}
       <p className="muted">
         ~{data.usableRangeKm} km estimated · ~{data.reachableRangeKm} km with
         10% reserve
