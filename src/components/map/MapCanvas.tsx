@@ -169,7 +169,7 @@ function useMapView(map: MapLibreMap | null, props: CanvasProps): void {
       });
   }, [map, selected, route, corridor]);
 }
-function visibleMapPadding(sheetHeight: number): PaddingOptions {
+function visibleMapPadding(sheetHeight: number): Required<PaddingOptions> {
   if (window.innerWidth >= 768)
     return { left: 424, right: 80, top: 80, bottom: 40 };
   return {
@@ -261,24 +261,25 @@ function useVisibleMap(map: MapLibreMap | null, props: CanvasProps): void {
 }
 function exposedMapBounds(
   map: MapLibreMap,
-  padding: PaddingOptions,
+  padding: Required<PaddingOptions>,
 ): BoundingBox {
   const { clientWidth: width, clientHeight: height } = map.getContainer();
   const left = Math.min(padding.left, Math.max(0, width - 1));
   const top = Math.min(padding.top, Math.max(0, height - 1));
   const right = Math.max(left + 1, width - padding.right);
   const bottom = Math.max(top + 1, height - padding.bottom);
-  const corners = [
+  const corners: [number, number][] = [
     [left, top],
     [right, top],
     [left, bottom],
     [right, bottom],
-  ].map(([x = 0, y = 0]) => map.unproject([x, y]));
+  ];
+  const points = corners.map((corner) => map.unproject(corner));
   return {
-    west: Math.min(...corners.map((point) => point.lng)),
-    east: Math.max(...corners.map((point) => point.lng)),
-    south: Math.min(...corners.map((point) => point.lat)),
-    north: Math.max(...corners.map((point) => point.lat)),
+    west: Math.min(...points.map((point) => point.lng)),
+    east: Math.max(...points.map((point) => point.lng)),
+    south: Math.min(...points.map((point) => point.lat)),
+    north: Math.max(...points.map((point) => point.lat)),
   };
 }
 function useMapAreaEvents(map: MapLibreMap | null, props: CanvasProps): void {
