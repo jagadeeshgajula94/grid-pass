@@ -71,6 +71,16 @@ class MockMap {
   getZoom(): number {
     return state.zoom;
   }
+  getMaxZoom(): number {
+    return 22;
+  }
+  getCenter(): typeof center {
+    return center;
+  }
+  project([lng, lat]: [number, number]): { x: number; y: number } {
+    const scale = (512 * 2 ** state.zoom) / 360;
+    return { x: lng * scale, y: -lat * scale };
+  }
   getBounds(): {
     getWest: () => number;
     getEast: () => number;
@@ -444,7 +454,7 @@ it("clusters nearby pins, zooms on click, reuses markers and removes stale pins"
   expect(state.easeTo).toHaveBeenCalled();
   emit("moveend");
   expect(screen.getByRole("button", { name: ZOOM_NEARBY })).toBe(cluster);
-  state.zoom = 18;
+  state.zoom = 22;
   emit("moveend");
   expect(screen.queryByRole("button", { name: /Zoom into/ })).toBeNull();
   expect(screen.getAllByRole("button", { name: /Koti charging/ })).toHaveLength(
@@ -461,6 +471,36 @@ it("clusters nearby pins, zooms on click, reuses markers and removes stale pins"
   );
   expect(screen.queryByRole("button", { name: /Koti charging/ })).toBeNull();
 });
+it.each([17, 18, 20, 22])(
+  "keeps coincident pins clustered beyond the index limit at zoom %i",
+  (zoom) => {
+    state.zoom = zoom;
+    const { unmount } = render(
+      <MapCanvas
+        center={center}
+        position={center}
+        light={false}
+        stations={[station, { ...station, id: "coincident" }]}
+        selected={null}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole("img", { name: YOUR_LOCATION }).parentElement,
+    ).toHaveClass("user-location-marker");
+    const bubble = screen.getByRole("button", { name: ZOOM_NEARBY });
+    fireEvent.click(bubble);
+    expect(state.easeTo).toHaveBeenCalledWith(
+      expect.objectContaining({ zoom: 22 }),
+    );
+    emit("move");
+    emit("resize");
+    expect(screen.getByRole("button", { name: ZOOM_NEARBY })).toBe(bubble);
+    unmount();
+    expect(state.handlers.get("move")?.size).toBe(0);
+    expect(state.handlers.get("resize")?.size).toBe(0);
+  },
+);
 it("only discovers user moves, not initial or programmatic camera movements or routes", () => {
   const onArea = vi.fn();
   const props = {
@@ -610,10 +650,10 @@ it("expands corridor clusters to route-numbered pins with the original selection
   expect(screen.queryByRole("button", { name: /Stop / })).toBeNull();
   fireEvent.click(cluster);
   expect(state.easeTo).toHaveBeenCalledWith(
-    expect.objectContaining({ zoom: 17 }),
+    expect.objectContaining({ zoom: expect.any(Number), duration: 750 }),
   );
   expect(onSelect).not.toHaveBeenCalled();
-  state.zoom = 17;
+  state.zoom = 21;
   emit("moveend");
   expect(screen.queryByRole("button", { name: /Zoom into/ })).toBeNull();
   const pin = screen.getByRole("button", { name: "Stop 3: Koti charging" });

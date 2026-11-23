@@ -676,6 +676,10 @@
   }
 }
 .station-pin {
+  width: 180px;
+  height: 48px;
+  overflow: hidden;
+  justify-content: center;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -739,6 +743,13 @@
   box-shadow:
     0 0 0 8px #3b82f629,
     0 1px 9px #0006;
+}
+.station-marker {
+  z-index: 1;
+}
+.user-location-marker {
+  z-index: 2;
+  pointer-events: none;
 }
 .drawer-top {
   display: flex;

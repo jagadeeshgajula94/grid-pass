@@ -63,6 +63,7 @@ function UserPosition({
 }): ReactElement {
   const [element] = useState(() => document.createElement("div"));
   useEffect(() => {
+    element.className = "user-location-marker";
     const marker = new Marker({ element })
       .setLngLat([center.lng, center.lat])
       .addTo(map);
