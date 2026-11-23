@@ -39,6 +39,7 @@ interface CanvasProps {
   light: boolean;
   stations: StationDto[];
   selected: StationDto | null;
+  highlighted?: StationDto | null;
   onSelect: (station: StationDto) => void;
 }
 function styleUrl(light: boolean): string {
@@ -132,6 +133,43 @@ function useMap(): {
   }, []);
   return { container, map, error };
 }
+function RecommendationHighlight({
+  map,
+  station,
+  sheetHeight = 150,
+}: {
+  map: MapLibreMap;
+  station: StationDto;
+  sheetHeight?: number;
+}): ReactElement {
+  const [element] = useState(() => document.createElement("div"));
+  useEffect(() => {
+    element.className = "recommendation-map-highlight";
+    const marker = new Marker({ element })
+      .setLngLat([station.lng, station.lat])
+      .addTo(map);
+    return (): void => {
+      marker.remove();
+    };
+  }, [map, station, element]);
+  useEffect(() => {
+    map.flyTo({
+      ...cameraMotion(),
+      center: [station.lng, station.lat],
+      zoom: 15,
+      padding: visibleMapPadding(sheetHeight),
+      offset: [0, 0],
+    });
+  }, [map, station, sheetHeight]);
+  return createPortal(
+    <div
+      className="recommendation-halo"
+      role="img"
+      aria-label={`Recommended charger: ${station.name}`}
+    />,
+    element,
+  );
+}
 function useMapView(map: MapLibreMap | null, props: CanvasProps): void {
   const {
     center,
@@ -206,7 +244,7 @@ function overviewState(map: MapLibreMap, props: CanvasProps): OverviewState {
       props.radiusKm ?? 5,
     ]),
     layout: overviewLayout(props.sheetHeight),
-    selected: !!props.selected,
+    selected: !!(props.selected || props.highlighted),
   };
 }
 function needsOverview(
@@ -331,6 +369,13 @@ export function MapCanvas(props: CanvasProps): ReactElement {
               map={map}
               center={props.position}
               accuracy={props.accuracy}
+            />
+          )}
+          {props.highlighted && (
+            <RecommendationHighlight
+              map={map}
+              station={props.highlighted}
+              sheetHeight={props.sheetHeight}
             />
           )}
           <MapStationMarkers

@@ -83,6 +83,204 @@
 .map-controls[hidden] {
   display: none;
 }
+.assistant-trigger {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  top: calc(max(16px, env(safe-area-inset-top)) + 174px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 24px;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 650;
+}
+.charge-assistant {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  animation: results-appear 240ms ease-out;
+}
+.assistant-inputs summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding: 10px 0;
+  font-size: 13px;
+  color: var(--accent);
+}
+.assistant-inputs[open] summary {
+  display: none;
+}
+.charge-assistant h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 21px;
+  font-weight: 700;
+}
+.charge-assistant h2 svg {
+  color: var(--accent);
+}
+.charge-assistant form {
+  display: grid;
+  gap: 14px;
+}
+.charge-assistant .back-button {
+  justify-self: start;
+}
+.assistant-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.assistant-heading .back-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 6px;
+  font-size: 13px;
+}
+.assistant-battery {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+.assistant-battery legend {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 0 6px;
+}
+.assistant-battery input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: var(--accent);
+}
+.assistant-battery .muted:last-child {
+  text-align: right;
+}
+.assistant-number {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 26px;
+  font-weight: 650;
+}
+.assistant-number input {
+  width: 92px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background);
+}
+.assistant-model-picker {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+.assistant-model-picker select {
+  min-width: 0;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background);
+  color: var(--foreground);
+}
+.assistant-model {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  font-size: 14px;
+  font-weight: 600;
+}
+.assistant-model small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.assistant-submit {
+  border-radius: 12px;
+  background: var(--accent);
+  color: #0b0f17;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 8px 12px;
+}
+.assistant-results {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.assistant-results > h3 {
+  font-size: 17px;
+  font-weight: 650;
+}
+.assistant-results ol {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+}
+.assistant-result {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.assistant-result h3 {
+  font-size: 14px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.assistant-result p {
+  line-height: 1.5;
+}
+.assistant-result > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.assistant-result .map-action {
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.assistant-disclaimer {
+  font-size: 11px;
+  line-height: 1.6;
+}
+.recommendation-map-highlight {
+  z-index: 0;
+  pointer-events: none;
+}
+.recommendation-halo {
+  width: 88px;
+  height: 88px;
+  border: 3px solid #10b981;
+  border-radius: 50%;
+  background: #10b98118;
+  box-shadow: 0 0 0 8px #10b98122;
+  animation: marker-appear 240ms ease-out;
+}
+@media (max-width: 767px) {
+  .map-workspace:has(.bottom-sheet[data-snap="full"]) .assistant-trigger {
+    display: none;
+  }
+}
 .map-controls .theme-toggle {
   font-size: 0;
   margin: 0;

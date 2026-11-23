@@ -784,6 +784,49 @@ it("expands corridor clusters to route-numbered pins with the original selection
   unmount();
   expect(state.handlers.get("moveend")?.size).toBe(0);
 });
+it.each([false, true])(
+  "flies to and highlights an assistant result above the current sheet, reduced motion %s",
+  (reduced) => {
+    vi.stubGlobal("innerWidth", 390);
+    vi.stubGlobal("innerHeight", 844);
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: reduced }));
+    const props = {
+      center,
+      light: false,
+      stations: [station],
+      selected: null,
+      onSelect: vi.fn(),
+      area: true,
+    };
+    const { rerender, unmount } = render(
+      <MapCanvas {...props} sheetHeight={422} />,
+    );
+    state.fitBounds.mockClear();
+    rerender(<MapCanvas {...props} sheetHeight={422} highlighted={station} />);
+    expect(
+      screen.getByRole("img", { name: `Recommended charger: ${station.name}` }),
+    ).toBeInTheDocument();
+    expect(state.flyTo).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        center: [station.lng, station.lat],
+        zoom: 15,
+        duration: reduced ? 0 : 750,
+        padding: { left: 48, right: 96, top: 84.4, bottom: 446 },
+        offset: [0, 0],
+      }),
+    );
+    rerender(<MapCanvas {...props} sheetHeight={764} highlighted={station} />);
+    expect(state.flyTo).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        padding: { left: 48, right: 96, top: 24, bottom: 788 },
+      }),
+    );
+    rerender(<MapCanvas {...props} sheetHeight={422} />);
+    expect(state.fitBounds).not.toHaveBeenCalled();
+    unmount();
+    vi.unstubAllGlobals();
+  },
+);
 it("hides the nearby ring in corridor mode, draws the route and restores nearby on clear", () => {
   const props = {
     center,

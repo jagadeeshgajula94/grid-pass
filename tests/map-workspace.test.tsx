@@ -9,7 +9,13 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { MapWorkspace } from "../src/components/map/MapWorkspace";
+import {
+  MapWorkspace,
+  assistantContext,
+} from "../src/components/map/MapWorkspace";
+import { assistantResponse } from "./recommendation-fixtures";
+import { recommendationSchema } from "../src/validation/recommendation.schema";
+import { destination } from "./planner-ui-fixtures";
 import { useLocation } from "../src/components/map/use-location";
 import { useStations } from "../src/components/map/use-stations";
 import type { StationDto } from "../src/domain/station";
@@ -28,6 +34,93 @@ const FALLBACK_ORIGIN = "Hyderabad — location unavailable";
 const THEME_TOGGLE = "Toggle color theme";
 const SEARCH_PROMPT = "Search a place or route";
 const CURRENT_LOCATION = "Current location";
+const CHARGE_ASSISTANT = "Charge assistant";
+it("chooses route before map area, otherwise area or the selected radar centre/radius", () => {
+  const center = { lat: 17.517, lng: 78.385 };
+  const state = {
+    planner: { destination: null, bufferKm: 10 },
+    search: { center: { ...center, id: "searched-origin", name: "Nizampet" } },
+    discovery: {
+      center: { lat: 17.52, lng: 78.4, id: "searched-area", name: "Area" },
+      radiusKm: 2,
+      area: { center, radiusKm: 2 },
+    },
+  };
+  expect(assistantContext(state)).toEqual({
+    mode: "area",
+    center: { lat: 17.52, lng: 78.4 },
+    radiusKm: 2,
+  });
+  expect(
+    assistantContext({ ...state, planner: { ...state.planner, destination } }),
+  ).toEqual({
+    mode: "route",
+    origin: center,
+    destination: { lat: destination.lat, lng: destination.lng },
+    bufferKm: 10,
+  });
+  expect(
+    assistantContext({
+      ...state,
+      discovery: { ...state.discovery, area: null, radiusKm: 20 },
+    }),
+  ).toEqual({
+    mode: "nearby",
+    center: { lat: 17.52, lng: 78.4 },
+    radiusKm: 20,
+  });
+  expect(
+    recommendationSchema.safeParse({
+      batteryPercent: 35,
+      context: assistantContext(state),
+    }).success,
+  ).toBe(true);
+});
+it("opens the assistant, sends radar context, highlights a result and returns focus on Back", async () => {
+  mockNizampet();
+  const fetcher = vi.fn((url: string, init?: RequestInit) =>
+    Promise.resolve(
+      url.includes("recommendations") && init?.method === "POST"
+        ? Response.json(assistantResponse)
+        : response(),
+    ),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  render(<MapWorkspace evModel="Tata Nexon EV" firstName="Driver" />);
+  await screen.findByText(STATION_NAME);
+  fireEvent.click(screen.getByRole("button", { name: "10 km" }));
+  fireEvent.click(screen.getByRole("button", { name: CHARGE_ASSISTANT }));
+  expect(
+    screen.getByRole("heading", { name: CHARGE_ASSISTANT }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Chargers within 10 km")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Find charging stops" }));
+  const show = await screen.findByRole("button", { name: /Show .* on map/ });
+  const post = fetcher.mock.calls.find(([url]) =>
+    url.includes("recommendations"),
+  );
+  const payload: unknown = JSON.parse(String(post?.[1]?.body));
+  expect(recommendationSchema.parse(payload).context).toEqual({
+    mode: "nearby",
+    center: { lat: 17.517, lng: 78.385 },
+    radiusKm: 10,
+  });
+  fireEvent.click(show);
+  expect(latestMap().highlighted?.id).toBe(
+    assistantResponse.recommendations[0]?.station.id,
+  );
+  fireEvent.change(screen.getByLabelText("Battery percentage"), {
+    target: { value: "3" },
+  });
+  expect(latestMap().highlighted).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  expect(screen.getByRole("button", { name: CHARGE_ASSISTANT })).toHaveFocus();
+  expect(document.querySelector(".bottom-sheet")).toHaveAttribute(
+    "data-snap",
+    "half",
+  );
+  expect(latestMap().highlighted).toBeNull();
+});
 function mockNizampet(): ReturnType<typeof vi.fn> {
   const getCurrentPosition = vi.fn((accept) =>
     accept({ coords: { latitude: 17.517, longitude: 78.385, accuracy: 40 } }),

@@ -1,13 +1,6 @@
 import { z } from "../lib/zod";
-
-export const EV_MODELS = [
-  "Mahindra XUV 9e",
-  "Tata Nexon EV",
-  "MG ZS EV",
-  "Hyundai Ioniq 5",
-  "BYD Atto 3",
-  "Kia EV6",
-] as const;
+import { EV_MODELS } from "../domain/ev-models";
+export { EV_MODELS } from "../domain/ev-models";
 export const PASSWORD_RULES = [
   {
     label: "12–128 characters",
