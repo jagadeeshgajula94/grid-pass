@@ -3,6 +3,68 @@ import { StationService, merge } from "../src/services/station.service";
 import { STATION_SEED } from "../src/db/station-seed";
 import { AppError } from "../src/lib/errors";
 const query = { lat: 17.385, lng: 78.4867, radiusKm: 5 };
+const NORTHWEST_AREAS = [
+  "Nizampet",
+  "Bachupally",
+  "Miyapur",
+  "KPHB",
+  "Kukatpally",
+  "Pragathi Nagar",
+  "Hitech City",
+];
+function northwestHubs(): typeof STATION_SEED {
+  return STATION_SEED.filter((station) =>
+    NORTHWEST_AREAS.some(
+      (area) => station.address === `${area} Charging Hub, Hyderabad`,
+    ),
+  );
+}
+it("seeds seven distinct northwest Hyderabad demo hubs with mixed networks and DC connectors", () => {
+  const hubs = northwestHubs();
+  expect(hubs).toHaveLength(7);
+  expect(new Set(STATION_SEED.map((station) => station.id)).size).toBe(
+    STATION_SEED.length,
+  );
+  expect(new Set(hubs.map((station) => station.network)).size).toBe(5);
+  expect(
+    hubs.every(
+      (station) =>
+        station.id.startsWith("local-") &&
+        station.name.includes("Charging Hub"),
+    ),
+  ).toBe(true);
+  const connectors = hubs.flatMap((station) => station.connectors);
+  expect(new Set(connectors.map((connector) => connector.powerKw))).toEqual(
+    new Set([30, 60, 90, 120]),
+  );
+  expect(new Set(connectors.map((connector) => connector.status))).toEqual(
+    new Set(["available", "busy"]),
+  );
+  expect(connectors.every((connector) => connector.type === "CCS2")).toBe(true);
+});
+it("serves six local demo hubs in Nizampet's default radar and adds Hitech City at 10 km", async () => {
+  const service = new StationService({
+    findNearby: vi.fn().mockResolvedValue({ ok: true, value: [] }),
+  });
+  const center = { lat: 17.517, lng: 78.385 };
+  const radar = await service.findNearby({ ...center, radiusKm: 5 });
+  expect(radar.stations).toHaveLength(6);
+  expect(radar.stations.every((station) => station.distanceKm <= 5)).toBe(true);
+  expect(
+    radar.stations.some((station) => station.address.startsWith("Nizampet ")),
+  ).toBe(true);
+  const wider = await service.findNearby({ ...center, radiusKm: 10 });
+  expect(
+    wider.stations.filter((station) =>
+      northwestHubs().some((hub) => hub.id === station.id),
+    ),
+  ).toHaveLength(7);
+  expect(
+    wider.stations.some((station) =>
+      station.address.startsWith("Hitech City "),
+    ),
+  ).toBe(true);
+});
 it("deduplicates ids before names or coordinates and preserves local priority", () => {
   const station = STATION_SEED[1];
   if (!station) throw new Error("Missing seed");

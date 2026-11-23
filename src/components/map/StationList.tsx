@@ -58,13 +58,15 @@ function StationResults({
   onSelect,
   corridor,
   loading,
+  area = false,
+  radiusKm = 5,
 }: StationListProps): ReactElement {
   return (
     <div className="station-results" data-loading={loading}>
       <StationSkeleton loading={loading} />
       {!loading && stations.length === 0 && (
         <p className="empty-state">
-          No stations match. Try another filter or city.
+          {emptyMessage(!!corridor, area, radiusKm)}
         </p>
       )}
       <div className="station-cards" inert={loading} aria-hidden={loading}>
@@ -79,6 +81,19 @@ function StationResults({
       </div>
     </div>
   );
+}
+function emptyMessage(
+  corridor: boolean,
+  area: boolean,
+  radiusKm: number,
+): string {
+  if (corridor)
+    return "No stations match. Try a wider route buffer or different filters.";
+  const scope = area ? "in this area" : `within ${radiusKm} km`;
+  const nextRadius = [5, 10, 20].find((radius) => radius > radiusKm);
+  if (!area && nextRadius)
+    return `No chargers match ${scope}. Try ${nextRadius} km or adjust your filters.`;
+  return `No chargers match ${scope}. Try zooming out or moving the map.`;
 }
 function StationSkeleton({ loading }: { loading?: boolean }): ReactElement {
   return (
@@ -126,6 +141,8 @@ export function StationList({
         onSelect={onSelect}
         corridor={corridor}
         loading={loading}
+        area={area}
+        radiusKm={radiusKm}
       />
       <p className="map-data-note">Local demo data · Availability may vary</p>
     </aside>

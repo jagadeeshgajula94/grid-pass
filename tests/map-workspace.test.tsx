@@ -154,7 +154,9 @@ it("shows safe errors and an empty list when fetching fails", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Connection unavailable",
   );
-  expect(screen.getByText(/No stations match/)).toBeInTheDocument();
+  expect(
+    screen.getByText(/No chargers match within 5 km. Try 10 km/),
+  ).toBeInTheDocument();
 });
 it("hides covered phone controls at full snap and restores them on desktop", async () => {
   vi.stubGlobal("innerWidth", 390);
