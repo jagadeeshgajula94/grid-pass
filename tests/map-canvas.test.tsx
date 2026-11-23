@@ -263,6 +263,33 @@ it("fits above the measured phone sheet and updates padding on resize", () => {
   );
   vi.unstubAllGlobals();
 });
+it("repeats a preview request for the same charger and lets recenter override its highlight", () => {
+  vi.useFakeTimers();
+  const props = {
+    center,
+    light: false,
+    stations: [station],
+    selected: null,
+    highlighted: station,
+    onSelect: vi.fn(),
+  };
+  const { rerender } = render(
+    <MapCanvas {...props} highlightRequest={1} fitRequest={0} />,
+  );
+  act(() => vi.advanceTimersByTime(100));
+  state.flyTo.mockClear();
+  rerender(<MapCanvas {...props} highlightRequest={2} fitRequest={0} />);
+  act(() => vi.advanceTimersByTime(100));
+  expect(state.flyTo).toHaveBeenCalledOnce();
+  state.fitBounds.mockClear();
+  rerender(<MapCanvas {...props} highlightRequest={2} fitRequest={1} />);
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+  rerender(<MapCanvas {...props} highlightRequest={3} fitRequest={1} />);
+  rerender(<MapCanvas {...props} highlightRequest={3} fitRequest={2} />);
+  state.flyTo.mockClear();
+  act(() => vi.advanceTimersByTime(100));
+  expect(state.flyTo).not.toHaveBeenCalled();
+});
 it.each([false, true])(
   "preserves the desktop camera on sheet measurements (corridor: %s)",
   (corridor) => {
@@ -826,6 +853,7 @@ it.each([
     expect(onArea).not.toHaveBeenCalled();
     rerender(<MapCanvas {...props} sheetHeight={450} highlighted={station} />);
     expect(onArea).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(100));
     state.unproject.mockClear();
     emit("moveend", movement);
     expect(onArea).not.toHaveBeenCalled();
@@ -867,15 +895,19 @@ it("refreshes an area highlight that finishes immediately as the map becomes rea
     />,
   );
   expect(onArea).not.toHaveBeenCalled();
-  act(() => vi.advanceTimersByTime(400));
+  act(() => vi.advanceTimersByTime(500));
   expect(onArea).toHaveBeenCalledOnce();
 });
+function mockPhoneMotion(reduced: boolean): void {
+  vi.stubGlobal("innerWidth", 390);
+  vi.stubGlobal("innerHeight", 844);
+  vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: reduced }));
+}
 it.each([false, true])(
   "flies to and highlights an assistant result above the current sheet, reduced motion %s",
   (reduced) => {
-    vi.stubGlobal("innerWidth", 390);
-    vi.stubGlobal("innerHeight", 844);
-    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: reduced }));
+    vi.useFakeTimers();
+    mockPhoneMotion(reduced);
     const props = {
       center,
       light: false,
@@ -889,6 +921,7 @@ it.each([false, true])(
     );
     state.fitBounds.mockClear();
     rerender(<MapCanvas {...props} sheetHeight={422} highlighted={station} />);
+    act(() => vi.advanceTimersByTime(100));
     expect(
       screen.getByRole("img", { name: `Recommended charger: ${station.name}` }),
     ).toBeInTheDocument();
@@ -902,7 +935,15 @@ it.each([false, true])(
       }),
       { recommendationAreaMove: true },
     );
-    rerender(<MapCanvas {...props} sheetHeight={764} highlighted={station} />);
+    rerender(
+      <MapCanvas
+        {...props}
+        sheetHeight={764}
+        highlighted={station}
+        highlightRequest={1}
+      />,
+    );
+    act(() => vi.advanceTimersByTime(100));
     expect(state.flyTo).toHaveBeenLastCalledWith(
       expect.objectContaining({
         padding: { left: 48, right: 96, top: 24, bottom: 788 },

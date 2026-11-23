@@ -357,6 +357,7 @@ function WorkspaceMap({
       stations={state.filtered}
       selected={state.selected}
       highlighted={assistant.highlighted}
+      highlightRequest={assistant.highlightRequest}
       onSelect={(station): void => {
         assistant.close();
         state.setSelected(station);
@@ -396,6 +397,7 @@ function useAssistantView(
 ): {
   opened: boolean;
   highlighted: StationDto | null;
+  highlightRequest: number;
   open: () => void;
   close: () => void;
   show: (station: StationDto) => void;
@@ -403,7 +405,9 @@ function useAssistantView(
 } {
   const [opened, setOpened] = useState(false);
   const [highlighted, setHighlighted] = useState<StationDto | null>(null);
+  const [highlightRequest, setHighlightRequest] = useState(0);
   const reset = useCallback((): void => setHighlighted(null), []);
+  useEffect(reset, [state.fitRequest, reset]);
   const previous = useRef(false);
   const selected = state.selected;
   useEffect(() => {
@@ -414,6 +418,7 @@ function useAssistantView(
   return {
     opened,
     highlighted,
+    highlightRequest,
     reset,
     open: (): void => {
       state.close();
@@ -428,6 +433,7 @@ function useAssistantView(
     },
     show: (station): void => {
       setHighlighted(station);
+      setHighlightRequest((request) => request + 1);
       sheet.setSnap("half");
     },
   };

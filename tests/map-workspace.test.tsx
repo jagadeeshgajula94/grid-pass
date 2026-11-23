@@ -35,6 +35,7 @@ const THEME_TOGGLE = "Toggle color theme";
 const SEARCH_PROMPT = "Search a place or route";
 const CURRENT_LOCATION = "Current location";
 const CHARGE_ASSISTANT = "Charge assistant";
+const FIND_STOPS = "Find charging stops";
 it("chooses route before map area, otherwise area or the selected radar centre/radius", () => {
   const center = { lat: 17.517, lng: 78.385 };
   const state = {
@@ -110,7 +111,7 @@ it("opens the assistant, sends radar context, highlights a result and returns fo
     screen.getByRole("heading", { name: CHARGE_ASSISTANT }),
   ).toBeInTheDocument();
   expect(screen.getByText("Chargers within 10 km")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Find charging stops" }));
+  fireEvent.click(screen.getByRole("button", { name: FIND_STOPS }));
   const show = await screen.findByRole("button", { name: /Show .* on map/ });
   const post = fetcher.mock.calls.find(([url]) =>
     url.includes("recommendations"),
@@ -147,6 +148,34 @@ function mockNizampet(): ReturnType<typeof vi.fn> {
   });
   return getCurrentPosition;
 }
+it("issues a fresh preview after panning to an area and clears it on Current location", async () => {
+  mockAssistantArea(STATION_NAME);
+  render(<MapWorkspace evModel="Tata Nexon EV" />);
+  await screen.findByText(STATION_NAME);
+  fireEvent.click(screen.getByRole("button", { name: CHARGE_ASSISTANT }));
+  fireEvent.click(screen.getByRole("button", { name: FIND_STOPS }));
+  const show = await screen.findByRole("button", { name: /Show .* on map/ });
+  fireEvent.click(show);
+  const request = latestMap().highlightRequest;
+  act(() =>
+    latestMap().onArea?.({
+      south: 17.5,
+      north: 17.52,
+      west: 78.37,
+      east: 78.39,
+    }),
+  );
+  fireEvent.click(show);
+  expect(latestMap().highlightRequest).toBe((request ?? 0) + 1);
+  expect(latestMap().highlighted).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: CURRENT_LOCATION }));
+  expect(latestMap()).toMatchObject({
+    highlighted: null,
+    area: false,
+    fitRequest: 1,
+    center: { lat: 17.517, lng: 78.385 },
+  });
+});
 function latestMap(): Parameters<typeof MapCanvas>[0] {
   const props = mapCanvas.mock.lastCall?.[0];
   if (!props) throw new Error("Map has not rendered");
@@ -220,7 +249,7 @@ it("keeps previewed assistant stops highlighted while the area refreshes, then s
   );
   await moveTime(1500);
   fireEvent.click(screen.getByRole("button", { name: CHARGE_ASSISTANT }));
-  fireEvent.click(screen.getByRole("button", { name: "Find charging stops" }));
+  fireEvent.click(screen.getByRole("button", { name: FIND_STOPS }));
   await moveTime(0);
   fireEvent.click(screen.getByRole("button", { name: /Show .* on map/ }));
   const highlighted = latestMap().highlighted;
