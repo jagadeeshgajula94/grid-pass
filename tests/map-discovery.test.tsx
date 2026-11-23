@@ -12,6 +12,8 @@ import { useLocation } from "../src/components/map/use-location";
 import { useMapArea, boundsToArea } from "../src/components/map/use-map-area";
 import { useStations } from "../src/components/map/use-stations";
 import { LocationBanner } from "../src/components/map/LocationBanner";
+import { plannerStation } from "./planner-ui-fixtures";
+import { haversineKm } from "../src/lib/geo";
 
 const BOUNDS = { south: 17.5, north: 17.52, west: 78.37, east: 78.39 };
 function geolocation(): {
@@ -182,7 +184,61 @@ it("resets area state and ignores movement while route mode disables discovery",
   act(() => result.current.onArea(BOUNDS));
   expect(result.current.area).toBeNull();
 });
-it("debounces areas, aborts previous requests, spaces calls and reuses rounded cache keys", async () => {
+it.each([
+  { lat: 17.0004, radiusKm: 1 },
+  { lat: 17, radiusKm: 1.04 },
+])(
+  "refetches boundary chargers for a changed circle $lat/$radiusKm",
+  async (next) => {
+    vi.useFakeTimers();
+    const center = { lat: 17, lng: 78 };
+    const common = {
+      ...plannerStation,
+      ...center,
+      id: "common",
+      distanceKm: 0,
+    };
+    const edge = { ...common, id: "edge", lat: 17.00904 };
+    const nextCenter = { ...center, lat: next.lat };
+    const reply = (stations: (typeof common)[]): Response =>
+      Response.json({ stations, center, radiusKm: 1, sources: [] });
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(reply([common]))
+      .mockResolvedValueOnce(
+        reply([
+          { ...common, distanceKm: haversineKm(nextCenter, common) },
+          { ...edge, distanceKm: haversineKm(nextCenter, edge) },
+        ]),
+      );
+    vi.stubGlobal("fetch", fetcher);
+    const { result, rerender } = renderHook(
+      ({ lat, radiusKm }) => useStations({ lat, lng: 78 }, true, radiusKm),
+      { initialProps: { lat: 17, radiusKm: 1 } },
+    );
+    await advance(0);
+    expect(result.current.stations.map(({ id }) => id)).toEqual(["common"]);
+    rerender(next);
+    await advance(0);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.current.stations.map(({ id }) => id)).toEqual([
+      "common",
+      "edge",
+    ]);
+    expect(result.current.stations[0]?.distanceKm).toBeCloseTo(
+      haversineKm(nextCenter, common),
+    );
+    const url = new URL(fetcher.mock.calls[1]?.[0], "http://localhost:3000");
+    expect(url.searchParams.get("lat")).toBe(String(next.lat));
+    expect(url.searchParams.get("radiusKm")).toBe(String(next.radiusKm));
+    rerender({ lat: 17, radiusKm: 1 });
+    await advance(0);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(result.current.stations.map(({ id }) => id)).toEqual(["common"]);
+    expect(result.current.stations[0]?.distanceKm).toBe(0);
+  },
+);
+it("debounces areas, aborts previous requests, spaces calls and reuses exact cache keys", async () => {
   vi.useFakeTimers();
   const fetcher = vi
     .fn()
@@ -210,7 +266,7 @@ it("debounces areas, aborts previous requests, spaces calls and reuses rounded c
   expect(fetcher).toHaveBeenCalledTimes(1);
   await advance(1);
   expect(fetcher).toHaveBeenCalledTimes(2);
-  rerender({ lat: 17.1001 });
+  rerender({ lat: 17.1 });
   expect(result.current.loading).toBe(false);
   await advance(1500);
   expect(fetcher).toHaveBeenCalledTimes(2);

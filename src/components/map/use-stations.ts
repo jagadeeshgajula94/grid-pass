@@ -12,7 +12,7 @@ interface CachedStations {
   expires: number;
 }
 function cacheKey(center: Point, radiusKm: number): string {
-  return `${center.lat.toFixed(3)}:${center.lng.toFixed(3)}:${radiusKm.toFixed(1)}`;
+  return JSON.stringify([center.lat, center.lng, radiusKm]);
 }
 function cacheStations(
   cache: Map<string, CachedStations>,
