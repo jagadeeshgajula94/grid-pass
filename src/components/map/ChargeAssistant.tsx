@@ -166,15 +166,17 @@ export function ChargeAssistant({
   onReset?: () => void;
 }): ReactElement {
   const assistant = useChargeAssistant(context, evModel, onReset);
+  const resultContext = assistant.resultContext ?? context;
   return (
     <section className="charge-assistant" aria-labelledby="assistant-title">
-      <AssistantHeader context={context} onBack={onBack} />
+      <AssistantHeader context={resultContext} onBack={onBack} />
       <details className="assistant-inputs" open={!assistant.data}>
         <summary>
           {assistant.battery}% · {assistant.model || "Choose your EV"} · Adjust
         </summary>
         <AssistantForm assistant={assistant} evModel={evModel} />
       </details>
+      <AssistantContextUpdate assistant={assistant} />
       {assistant.loading && (
         <p role="status">Checking compatible, available chargers…</p>
       )}
@@ -183,13 +185,33 @@ export function ChargeAssistant({
         <AssistantResults data={assistant.data} onShow={onShow} />
       )}
       <p className="assistant-disclaimer muted">
-        {context.mode === "area" &&
+        {resultContext.mode === "area" &&
           "Distances and arrival estimates start at this map area's centre. "}
         Approximate public EV figures, not a range guarantee. Includes a 10%
         arrival reserve. Local demo availability; confirm before driving.
         Charging is not yet supported.
       </p>
     </section>
+  );
+}
+function AssistantContextUpdate({
+  assistant,
+}: {
+  assistant: Assistant;
+}): ReactElement | null {
+  if (!assistant.contextChanged) return null;
+  return (
+    <p className="assistant-context-update muted" role="status">
+      Map moved ·{" "}
+      <button
+        className="map-action"
+        type="button"
+        onClick={assistant.submit}
+        disabled={assistant.loading || !assistant.model}
+      >
+        Update stops
+      </button>
+    </p>
   );
 }
 function AssistantHeader({

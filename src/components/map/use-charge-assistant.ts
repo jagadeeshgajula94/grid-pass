@@ -9,7 +9,14 @@ interface AssistantState {
   data: RecommendationDto | null;
   loading: boolean;
   error: string;
+  resultContext: RecommendationContext | null;
 }
+const INITIAL_STATE: AssistantState = {
+  data: null,
+  loading: false,
+  error: "",
+  resultContext: null,
+};
 export function useChargeAssistant(
   context: RecommendationContext,
   accountModel: string,
@@ -20,6 +27,7 @@ export function useChargeAssistant(
   model: EvModel | "";
   setModel: (value: EvModel | "") => void;
   submit: () => void;
+  contextChanged: boolean;
 } {
   const [battery, setBattery] = useState(35);
   const [model, setModel] = useState<EvModel | "">(
@@ -38,26 +46,26 @@ function useAssistantRequest(
   battery: number,
   model: EvModel | "",
   onReset?: () => void,
-): AssistantState & { submit: () => void } {
-  const [state, setState] = useState<AssistantState>({
-    data: null,
-    loading: false,
-    error: "",
-  });
+): AssistantState & { submit: () => void; contextChanged: boolean } {
+  const [state, setState] = useState<AssistantState>(INITIAL_STATE);
   const controller = useRef<AbortController | null>(null);
+  const reset = useRef(onReset);
   const contextKey = JSON.stringify(context);
   useEffect(() => {
+    reset.current = onReset;
+  }, [onReset]);
+  useEffect(() => {
     controller.current?.abort();
-    onReset?.();
-    setState({ data: null, loading: false, error: "" });
+    reset.current?.();
+    setState(INITIAL_STATE);
     return (): void => controller.current?.abort();
-  }, [contextKey, battery, model, onReset]);
+  }, [battery, model]);
   const submit = (): void => {
     controller.current?.abort();
     onReset?.();
     const request = new AbortController();
     controller.current = request;
-    setState({ data: null, loading: true, error: "" });
+    setState({ data: null, loading: true, error: "", resultContext: context });
     void fetchRecommendations(
       { batteryPercent: battery, evModel: model || undefined, context },
       request.signal,
@@ -67,8 +75,15 @@ function useAssistantRequest(
           data: result.ok ? result.value : null,
           loading: false,
           error: result.ok ? "" : result.error.message,
+          resultContext: context,
         });
     });
   };
-  return { ...state, submit };
+  return {
+    ...state,
+    submit,
+    contextChanged:
+      state.resultContext !== null &&
+      JSON.stringify(state.resultContext) !== contextKey,
+  };
 }

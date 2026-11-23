@@ -20,6 +20,8 @@ import {
 import type { RecommendationContext } from "../src/domain/recommendation";
 const FIND_STOPS = "Find charging stops";
 const BATTERY_PERCENT = "Battery percentage";
+const UPDATE_STOPS = "Update stops";
+const RECOMMENDATIONS = "Charging recommendations";
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -59,7 +61,7 @@ it("collects a guest model, syncs slider/number, explains results, shows a stati
   });
   expect(screen.getByLabelText("Battery level")).toHaveValue("35");
   fireEvent.click(screen.getByRole("button", { name: FIND_STOPS }));
-  await screen.findByRole("region", { name: "Charging recommendations" });
+  await screen.findByRole("region", { name: RECOMMENDATIONS });
   expect(fetcher).toHaveBeenCalledWith(
     "/api/recommendations/charging",
     expect.objectContaining({
@@ -133,9 +135,9 @@ it("handles an empty number, clamps bounds, displays safe errors and permits ret
     "Please wait a minute",
   );
   fireEvent.click(screen.getByRole("button", { name: FIND_STOPS }));
-  await screen.findByRole("region", { name: "Charging recommendations" });
+  await screen.findByRole("region", { name: RECOMMENDATIONS });
 });
-it("aborts stale requests when inputs or context change and on unmount", async () => {
+it("aborts input changes, explicit resubmissions and unmount, but keeps requests pinned across map moves", async () => {
   const fetcher = vi
     .fn()
     .mockReturnValue(new Promise<Response>(() => undefined));
@@ -154,8 +156,9 @@ it("aborts stale requests when inputs or context change and on unmount", async (
   expect(fetcher.mock.calls[0]?.[1].signal.aborted).toBe(true);
   act(() => result.current.submit());
   rerender({ context: { ...nearbyContext, mode: "area" } });
-  expect(fetcher.mock.calls[1]?.[1].signal.aborted).toBe(true);
+  expect(fetcher.mock.calls[1]?.[1].signal.aborted).toBe(false);
   act(() => result.current.submit());
+  expect(fetcher.mock.calls[1]?.[1].signal.aborted).toBe(true);
   unmount();
   expect(fetcher.mock.calls[2]?.[1].signal.aborted).toBe(true);
 });
@@ -217,7 +220,7 @@ it("preserves and renders the service's route guidance as its own paragraph", as
   fireEvent.click(screen.getByRole("button", { name: FIND_STOPS }));
   expect((await screen.findByText(guidance)).tagName).toBe("P");
 });
-it("clears previous results on a new context and ignores identical remeasurements", async () => {
+it("pins results to their submitted context and removes the update action when the map returns", async () => {
   mockFetch();
   const reset = vi.fn();
   const { result, rerender } = renderHook(
@@ -232,6 +235,59 @@ it("clears previous results on a new context and ignores identical remeasurement
   expect(result.current.data).not.toBeNull();
   expect(reset).not.toHaveBeenCalled();
   rerender({ context: { ...nearbyContext, radiusKm: 10 } });
-  expect(result.current.data).toBeNull();
-  expect(reset).toHaveBeenCalledOnce();
+  expect(result.current.data).not.toBeNull();
+  expect(reset).not.toHaveBeenCalled();
+  expect(result.current.contextChanged).toBe(true);
+  expect(result.current.resultContext).toEqual(nearbyContext);
+  rerender({ context: { ...nearbyContext } });
+  expect(result.current.contextChanged).toBe(false);
 });
+it.each([
+  ["results", false, true],
+  ["empty results", true, true],
+  ["an update failure", false, false],
+] as const)(
+  "keeps %s pinned until Update stops explicitly requests the current map",
+  async (_name, empty, succeeds) => {
+    const fetcher = mockFetch();
+    fetcher.mockResolvedValueOnce(
+      Response.json({
+        ...assistantResponse,
+        recommendations: empty ? [] : assistantResponse.recommendations,
+      }),
+    );
+    const onReset = vi.fn();
+    const props = { evModel: NEXON, onBack: vi.fn(), onShow: vi.fn(), onReset };
+    const { rerender } = render(
+      <ChargeAssistant {...props} context={nearbyContext} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: FIND_STOPS }));
+    await screen.findByRole("region", { name: RECOMMENDATIONS });
+    onReset.mockClear();
+    const context: RecommendationContext = {
+      ...nearbyContext,
+      mode: "area",
+      radiusKm: 1,
+    };
+    rerender(<ChargeAssistant {...props} context={context} />);
+    expect(
+      screen.getByRole("region", { name: RECOMMENDATIONS }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Chargers within 5 km")).toBeInTheDocument();
+    expect(onReset).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledOnce();
+    if (!succeeds)
+      fetcher.mockResolvedValueOnce(new Response(null, { status: 500 }));
+    fireEvent.click(screen.getByRole("button", { name: UPDATE_STOPS }));
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1].body))).toMatchObject({
+      context,
+    });
+    expect(screen.getByText("Chargers in this map area")).toBeInTheDocument();
+    if (!succeeds) {
+      await screen.findByRole("alert");
+      fireEvent.click(screen.getByRole("button", { name: FIND_STOPS }));
+    }
+    await screen.findByRole("region", { name: RECOMMENDATIONS });
+    expect(screen.queryByRole("button", { name: UPDATE_STOPS })).toBeNull();
+  },
+);

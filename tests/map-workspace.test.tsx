@@ -171,9 +171,9 @@ const station: StationDto = {
   amenities: [],
   lastUpdated: "2026-01-01T00:00:00.000Z",
 };
-function response(): Response {
+function response(name = STATION_NAME): Response {
   return Response.json({
-    stations: [station],
+    stations: [{ ...station, name }],
     center: { lat: station.lat, lng: station.lng },
     radiusKm: 5,
     sources: ["local"],
@@ -188,6 +188,68 @@ afterEach(() => {
   Object.defineProperty(navigator, "geolocation", {
     configurable: true,
     value: undefined,
+  });
+});
+function mockAssistantArea(previewStation: string): ReturnType<typeof vi.fn> {
+  mockNizampet();
+  const fetcher = vi.fn((url: string) => {
+    if (url.includes("recommendations"))
+      return Promise.resolve(
+        Response.json({ ...assistantResponse, contextMode: "area" }),
+      );
+    return Promise.resolve(
+      response(url.includes("lat=17.53") ? previewStation : STATION_NAME),
+    );
+  });
+  vi.stubGlobal("fetch", fetcher);
+  return fetcher;
+}
+it("keeps previewed assistant stops highlighted while the area refreshes, then shows that area after Back", async () => {
+  const previewStation = "Preview area charger";
+  const fetcher = mockAssistantArea(previewStation);
+  render(<MapWorkspace evModel="Tata Nexon EV" />);
+  await screen.findByText(STATION_NAME);
+  vi.useFakeTimers();
+  act(() =>
+    latestMap().onArea?.({
+      south: 17.5,
+      north: 17.52,
+      west: 78.37,
+      east: 78.39,
+    }),
+  );
+  await moveTime(1500);
+  fireEvent.click(screen.getByRole("button", { name: CHARGE_ASSISTANT }));
+  fireEvent.click(screen.getByRole("button", { name: "Find charging stops" }));
+  await moveTime(0);
+  fireEvent.click(screen.getByRole("button", { name: /Show .* on map/ }));
+  const highlighted = latestMap().highlighted;
+  expect(highlighted).not.toBeNull();
+  act(() =>
+    latestMap().onArea?.({
+      south: 17.52,
+      north: 17.54,
+      west: 78.37,
+      east: 78.39,
+    }),
+  );
+  await moveTime(1500);
+  expect(
+    screen.getByRole("region", { name: "Charging recommendations" }),
+  ).toBeInTheDocument();
+  expect(latestMap().highlighted).toEqual(highlighted);
+  expect(
+    fetcher.mock.calls.filter(([url]) => url.includes("recommendations")),
+  ).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  expect(
+    screen.getByRole("heading", { name: "In this area" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText(previewStation)).toBeInTheDocument();
+  expect(latestMap()).toMatchObject({
+    area: true,
+    center: { lat: 17.53, lng: 78.38 },
+    highlighted: null,
   });
 });
 it("falls back when geolocation is missing and ignores obsolete requests", () => {
