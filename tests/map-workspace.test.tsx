@@ -14,9 +14,10 @@ import { useLocation } from "../src/components/map/use-location";
 import { useStations } from "../src/components/map/use-stations";
 import type { StationDto } from "../src/domain/station";
 import { StrictMode } from "react";
+import type { MapCanvas } from "../src/components/map/MapCanvas";
 
 const mapCanvas = vi.hoisted(() =>
-  vi.fn<(props: { fitRequest?: number }) => null>(() => null),
+  vi.fn<(props: Parameters<typeof MapCanvas>[0]) => null>(() => null),
 );
 vi.mock("next/dynamic", () => ({ default: () => mapCanvas }));
 vi.mock("next/navigation", () => ({
@@ -27,6 +28,26 @@ const FALLBACK_ORIGIN = "Hyderabad — location unavailable";
 const THEME_TOGGLE = "Toggle color theme";
 const SEARCH_PROMPT = "Search a place or route";
 const CURRENT_LOCATION = "Current location";
+function mockNizampet(): ReturnType<typeof vi.fn> {
+  const getCurrentPosition = vi.fn((accept) =>
+    accept({ coords: { latitude: 17.517, longitude: 78.385, accuracy: 40 } }),
+  );
+  Object.defineProperty(navigator, "geolocation", {
+    configurable: true,
+    value: { getCurrentPosition },
+  });
+  return getCurrentPosition;
+}
+function latestMap(): Parameters<typeof MapCanvas>[0] {
+  const props = mapCanvas.mock.lastCall?.[0];
+  if (!props) throw new Error("Map has not rendered");
+  return props;
+}
+async function moveTime(milliseconds: number): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(milliseconds);
+  });
+}
 const station: StationDto = {
   id: "one",
   name: STATION_NAME,
@@ -51,6 +72,7 @@ function response(): Response {
 }
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   localStorage.clear();
@@ -79,7 +101,7 @@ it("selects current position and ignores stale callbacks after preset changes", 
   expect(result.current.location).toBe(CURRENT_LOCATION);
   act(() => result.current.locate());
   act(() => result.current.choose({ lat: 12, lng: 77 }, "Bengaluru"));
-  act(() => getCurrentPosition.mock.calls[1]?.[1]());
+  act(() => getCurrentPosition.mock.calls[1]?.[1]({ code: 2 }));
   expect(result.current.location).toBe("Bengaluru");
   unmount();
   Object.defineProperty(navigator, "geolocation", {
@@ -200,7 +222,10 @@ it.each(["success", "denied", "timeout"])(
     );
     expect(fetcher).not.toHaveBeenCalled();
     const callbacks = getCurrentPosition.mock.calls.at(-1);
-    expect(callbacks?.[2]).toMatchObject({ timeout: 5000 });
+    expect(callbacks?.[2]).toMatchObject({
+      timeout: 10000,
+      enableHighAccuracy: true,
+    });
     act(() => {
       if (outcome === "success")
         callbacks?.[0]({ coords: { latitude: 13, longitude: 80 } });
@@ -217,6 +242,112 @@ it.each(["success", "denied", "timeout"])(
     );
   },
 );
+it("provides radius chips that refetch and resize radar, with active re-selection a no-op", async () => {
+  const fetcher = vi.fn().mockImplementation(() => Promise.resolve(response()));
+  vi.stubGlobal("fetch", fetcher);
+  render(<MapWorkspace />);
+  await screen.findByText(STATION_NAME);
+  expect(latestMap().radiusKm).toBe(5);
+  for (const radius of [10, 20, 5]) {
+    fireEvent.click(screen.getByRole("button", { name: `${radius} km` }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("complementary", { name: "Nearby stations" }),
+      ).toHaveAttribute("aria-busy", "false"),
+    );
+    expect(latestMap().radiusKm).toBe(radius);
+    expect(screen.getByText(`${radius} km radius`)).toBeInTheDocument();
+  }
+  expect(fetcher.mock.calls.map((call) => call[0])).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("radiusKm=5"),
+      expect.stringContaining("radiusKm=10"),
+      expect.stringContaining("radiusKm=20"),
+    ]),
+  );
+  const count = fetcher.mock.calls.length;
+  fireEvent.click(screen.getByRole("button", { name: "5 km" }));
+  expect(fetcher).toHaveBeenCalledTimes(count);
+});
+it.each(["station", "filters"])(
+  "shows fallback recovery and focuses search from %s without a fake user position",
+  async (view) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => Promise.resolve(response())),
+    );
+    render(<MapWorkspace />);
+    await screen.findByText(STATION_NAME);
+    expect(latestMap().position).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: view === "station" ? /Statiq/ : /Filters/,
+      }),
+    );
+    expect(
+      screen.getByRole("status", { name: "Location unavailable" }),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Search my area" }));
+    expect(screen.getByRole("combobox", { name: "Origin" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Search my area" }));
+    expect(screen.getByRole("combobox", { name: "Origin" })).toHaveFocus();
+    expect(
+      screen.getByRole("region", { name: "Explore charging" }),
+    ).toHaveAttribute("data-snap", "full");
+    fireEvent.click(screen.getByRole("button", { name: /Statiq/ }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("combobox", { name: "Origin" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(latestMap().fitRequest).toBe(1);
+  },
+);
+it("returns from area to the real location and preserves the selected radar radius", async () => {
+  const getCurrentPosition = mockNizampet();
+  const fetcher = vi.fn().mockImplementation(() => Promise.resolve(response()));
+  vi.stubGlobal("fetch", fetcher);
+  render(<MapWorkspace />);
+  await screen.findByText(STATION_NAME);
+  fireEvent.click(screen.getByRole("button", { name: "10 km" }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("complementary", { name: "Nearby stations" }),
+    ).toHaveAttribute("aria-busy", "false"),
+  );
+  vi.useFakeTimers();
+  act(() =>
+    latestMap().onArea?.({
+      south: 17.5,
+      north: 17.52,
+      west: 78.37,
+      east: 78.39,
+    }),
+  );
+  expect(
+    screen.getByRole("heading", { name: "In this area" }),
+  ).toBeInTheDocument();
+  expect(latestMap()).toMatchObject({ area: true, radiusKm: 1.1 });
+  await moveTime(1500);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  act(() =>
+    latestMap().onArea?.({
+      south: 18.5,
+      north: 18.52,
+      west: 78.37,
+      east: 78.39,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Back to my location" }));
+  await moveTime(2000);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(latestMap()).toMatchObject({
+    area: false,
+    radiusKm: 10,
+    center: { lat: 17.517, lng: 78.385 },
+    position: { lat: 17.517, lng: 78.385 },
+    fitRequest: 1,
+  });
+  expect(getCurrentPosition).toHaveBeenCalledTimes(2);
+});
 it("does not expose aborted requests as UI errors", async () => {
   vi.stubGlobal(
     "fetch",

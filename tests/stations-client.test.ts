@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { fetchStations } from "../src/components/map/stations-client";
 import { AppError } from "../src/lib/errors";
+import { plannerStation } from "./planner-ui-fixtures";
 const center = { lat: 17.385, lng: 78.4867 };
 afterEach(() => vi.unstubAllGlobals());
 it("validates response data and carries abort signals", async () => {
@@ -39,6 +40,38 @@ it.each([
     expect(result.error).toMatchObject({ code, message });
   },
 );
+it.each([10, 20, 50])(
+  "accepts validated station distances for a %s km discovery radius",
+  async (radiusKm) => {
+    const stations = [{ ...plannerStation, distanceKm: radiusKm - 1 }];
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json({ stations, center, radiusKm, sources: [] }),
+      );
+    vi.stubGlobal("fetch", fetcher);
+    expect(
+      await fetchStations(center, new AbortController().signal, radiusKm),
+    ).toEqual({ ok: true, value: stations });
+    expect(fetcher.mock.calls[0]?.[0]).toContain(`radiusKm=${radiusKm}`);
+  },
+);
+it("still rejects station distances beyond the API maximum", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      Response.json({
+        stations: [{ ...plannerStation, distanceKm: 51 }],
+        center,
+        radiusKm: 50,
+        sources: [],
+      }),
+    ),
+  );
+  expect(
+    await fetchStations(center, new AbortController().signal, 50),
+  ).toMatchObject({ ok: false, error: { code: "VALIDATION" } });
+});
 it("handles connection errors", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
   const result = await fetchStations(center, new AbortController().signal);

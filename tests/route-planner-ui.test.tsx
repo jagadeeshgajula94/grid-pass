@@ -13,6 +13,7 @@ import { MapWorkspace } from "../src/components/map/MapWorkspace";
 import { PlaceAutocomplete } from "../src/components/map/PlaceAutocomplete";
 import { useCorridor } from "../src/components/map/use-corridor";
 import { rangeContext } from "../src/components/map/ev-range";
+import type { MapCanvas } from "../src/components/map/MapCanvas";
 import {
   corridorFixture,
   destination,
@@ -26,21 +27,21 @@ const ARIA_ACTIVE_DESCENDANT = "aria-activedescendant";
 const ARIA_EXPANDED = "aria-expanded";
 const GUEST_RANGE = "Sign in to see range for your EV";
 const FIT_REQUEST = "data-fit-request";
+const mapView = vi.hoisted(() => ({
+  latest: null as Parameters<typeof MapCanvas>[0] | null,
+}));
 vi.mock("next/dynamic", () => ({
   default:
     () =>
-    ({
-      corridor,
-      fitRequest,
-    }: {
-      corridor: boolean;
-      fitRequest: number;
-    }): React.ReactElement => (
-      <div
-        aria-label={corridor ? ROUTE_POLYLINE : NEARBY_RING}
-        data-fit-request={fitRequest}
-      />
-    ),
+    (props: Parameters<typeof MapCanvas>[0]): React.ReactElement => {
+      mapView.latest = props;
+      return (
+        <div
+          aria-label={props.corridor ? ROUTE_POLYLINE : NEARBY_RING}
+          data-fit-request={props.fitRequest}
+        />
+      );
+    },
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn() }),
@@ -114,6 +115,31 @@ it("switches to numbered corridor cards, opens the drawer, filters and clears ba
     screen.getByRole("complementary", { name: "Nearby stations" }),
   ).toBeInTheDocument();
   expect(screen.queryByRole("group", { name: "Corridor buffer" })).toBeNull();
+});
+it("never area-fetches on user map movement in route mode", async () => {
+  const fetcher = mockPlanner();
+  render(<MapWorkspace />);
+  await planTrip();
+  const nearbyCount = (): number =>
+    fetcher.mock.calls.filter(([url]) => String(url).includes("nearby")).length;
+  const initial = nearbyCount();
+  vi.useFakeTimers();
+  act(() =>
+    mapView.latest?.onArea?.({
+      south: 17.5,
+      north: 17.52,
+      west: 78.37,
+      east: 78.39,
+    }),
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  expect(nearbyCount()).toBe(initial);
+  expect(mapView.latest?.area).toBe(false);
+  expect(
+    screen.getByRole("complementary", { name: "Corridor stations" }),
+  ).toBeInTheDocument();
 });
 it("refetches on buffer changes and swaps endpoints", async () => {
   const fetcher = mockPlanner();

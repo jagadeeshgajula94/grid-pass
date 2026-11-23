@@ -7,6 +7,7 @@ import Supercluster, {
 } from "supercluster";
 import type { StationDto } from "../../domain/station";
 import { StationPin } from "./StationPin";
+import { cameraMotion } from "./map-layers";
 interface PinProperties {
   station: StationDto;
   number: number;
@@ -147,6 +148,7 @@ function MarkerContent({
         aria-label={`Zoom into ${properties.point_count} ${numbered ? "stops" : "stations"}`}
         onClick={() =>
           map.easeTo({
+            ...cameraMotion(),
             center: entry.marker.getLngLat(),
             zoom: index.getClusterExpansionZoom(properties.cluster_id),
           })

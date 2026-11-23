@@ -10,12 +10,15 @@ import {
 import { MapCanvas } from "../src/components/map/MapCanvas";
 import type { StationDto } from "../src/domain/station";
 import { corridorFixture } from "./planner-ui-fixtures";
+import { circleCoordinates } from "../src/lib/geo";
 const RADIUS_OUTLINE = "radius-outline";
+const YOUR_LOCATION = "Your location";
+const ZOOM_NEARBY = "Zoom into 2 stations";
 
 const state = vi.hoisted(() => ({
   zoom: 12,
   fail: false,
-  handlers: new Map<string, Set<() => void>>(),
+  handlers: new Map<string, Set<(event?: { originalEvent?: Event }) => void>>(),
   setStyle: vi.fn(),
   fitBounds: vi.fn(),
   flyTo: vi.fn(),
@@ -31,13 +34,19 @@ class MockMap {
     if (state.fail) throw new Error("WebGL unavailable");
   }
   addControl = vi.fn();
-  on(event: string, handler: () => void): this {
+  on(
+    event: string,
+    handler: (event?: { originalEvent?: Event }) => void,
+  ): this {
     const handlers = state.handlers.get(event) ?? new Set();
     handlers.add(handler);
     state.handlers.set(event, handlers);
     return this;
   }
-  off(event: string, handler: () => void): this {
+  off(
+    event: string,
+    handler: (event?: { originalEvent?: Event }) => void,
+  ): this {
     state.handlers.get(event)?.delete(handler);
     return this;
   }
@@ -121,9 +130,9 @@ const station: StationDto = {
   amenities: [],
   lastUpdated: "2026-01-01T00:00:00.000Z",
 };
-function emit(event: string): void {
+function emit(event: string, payload?: { originalEvent?: Event }): void {
   act(() => {
-    for (const handler of state.handlers.get(event) ?? []) handler();
+    for (const handler of state.handlers.get(event) ?? []) handler(payload);
   });
 }
 beforeEach(() => {
@@ -369,20 +378,19 @@ it("refits route endpoints when a desktop viewport narrows", () => {
   expect(state.fitBounds).toHaveBeenCalledOnce();
   vi.unstubAllGlobals();
 });
-it("renders React pins, a center marker and radius; re-adds layers on style changes", () => {
+it("renders React pins, a valid location marker and radius; re-adds layers on style changes", () => {
   const onSelect = vi.fn();
   const { rerender, unmount } = render(
     <MapCanvas
       center={center}
+      position={center}
       light={false}
       stations={[station]}
       selected={null}
       onSelect={onSelect}
     />,
   );
-  expect(
-    screen.getByRole("img", { name: "Search center" }),
-  ).toBeInTheDocument();
+  expect(screen.getByRole("img", { name: YOUR_LOCATION })).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Koti charging/ }));
   expect(onSelect).toHaveBeenCalledWith(station);
   expect(state.addSource).toHaveBeenCalledWith(
@@ -414,7 +422,7 @@ it("renders React pins, a center marker and radius; re-adds layers on style chan
   expect(screen.queryByRole("status")).toBeNull();
   unmount();
   expect(state.remove).toHaveBeenCalledOnce();
-  expect(screen.queryByRole("img", { name: "Search center" })).toBeNull();
+  expect(screen.queryByRole("img", { name: YOUR_LOCATION })).toBeNull();
 });
 it("clusters nearby pins, zooms on click, reuses markers and removes stale pins", () => {
   const onSelect = vi.fn();
@@ -431,13 +439,11 @@ it("clusters nearby pins, zooms on click, reuses markers and removes stale pins"
       onSelect={onSelect}
     />,
   );
-  const cluster = screen.getByRole("button", { name: "Zoom into 2 stations" });
+  const cluster = screen.getByRole("button", { name: ZOOM_NEARBY });
   fireEvent.click(cluster);
   expect(state.easeTo).toHaveBeenCalled();
   emit("moveend");
-  expect(screen.getByRole("button", { name: "Zoom into 2 stations" })).toBe(
-    cluster,
-  );
+  expect(screen.getByRole("button", { name: ZOOM_NEARBY })).toBe(cluster);
   state.zoom = 18;
   emit("moveend");
   expect(screen.queryByRole("button", { name: /Zoom into/ })).toBeNull();
@@ -455,6 +461,121 @@ it("clusters nearby pins, zooms on click, reuses markers and removes stale pins"
   );
   expect(screen.queryByRole("button", { name: /Koti charging/ })).toBeNull();
 });
+it("only discovers user moves, not initial or programmatic camera movements or routes", () => {
+  const onArea = vi.fn();
+  const props = {
+    center,
+    light: false,
+    stations: [],
+    selected: null,
+    onSelect: vi.fn(),
+    onArea,
+  };
+  const { rerender } = render(<MapCanvas {...props} />);
+  emit("movestart");
+  emit("moveend");
+  expect(onArea).not.toHaveBeenCalled();
+  emit("movestart", { originalEvent: new MouseEvent("mousedown") });
+  emit("moveend");
+  expect(onArea).toHaveBeenCalledWith({
+    west: 78.4,
+    east: 78.6,
+    south: 17.3,
+    north: 17.5,
+  });
+  emit("moveend");
+  expect(onArea).toHaveBeenCalledOnce();
+  rerender(<MapCanvas {...props} corridor />);
+  emit("moveend", { originalEvent: new WheelEvent("wheel") });
+  expect(onArea).toHaveBeenCalledOnce();
+});
+it("draws the selected radar radius, hides it in area mode and preserves a panned area", () => {
+  const props = {
+    center,
+    light: false,
+    stations: [],
+    selected: null,
+    onSelect: vi.fn(),
+  };
+  const { rerender } = render(<MapCanvas {...props} radiusKm={20} />);
+  expect(state.addSource).toHaveBeenCalledWith(
+    "radius",
+    expect.objectContaining({
+      data: expect.objectContaining({
+        geometry: {
+          type: "Polygon",
+          coordinates: [circleCoordinates(center, 20)],
+        },
+      }),
+    }),
+  );
+  state.addSource.mockClear();
+  state.fitBounds.mockClear();
+  rerender(
+    <MapCanvas
+      {...props}
+      center={{ lat: 17.4, lng: 78.5 }}
+      area
+      radiusKm={1.5}
+    />,
+  );
+  expect(state.addSource).not.toHaveBeenCalledWith("radius", expect.anything());
+  expect(state.fitBounds).not.toHaveBeenCalled();
+  fireEvent(window, new Event("resize"));
+  expect(state.fitBounds).not.toHaveBeenCalled();
+  rerender(<MapCanvas {...props} radiusKm={20} />);
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+});
+it("omits a fallback dot and shows a valid accuracy circle with an approximate label only above 1000 m", () => {
+  const props = {
+    center,
+    light: false,
+    stations: [],
+    selected: null,
+    onSelect: vi.fn(),
+  };
+  const { rerender } = render(<MapCanvas {...props} />);
+  expect(screen.queryByRole("img", { name: /Your/ })).toBeNull();
+  rerender(<MapCanvas {...props} position={center} accuracy={1800} />);
+  expect(screen.getByText("Approximate")).toBeInTheDocument();
+  expect(state.addSource).toHaveBeenCalledWith(
+    "location-accuracy",
+    expect.objectContaining({
+      data: expect.objectContaining({
+        geometry: {
+          type: "Polygon",
+          coordinates: [circleCoordinates(center, 1.8)],
+        },
+      }),
+    }),
+  );
+  rerender(<MapCanvas {...props} position={center} accuracy={1000} />);
+  expect(screen.queryByText("Approximate")).toBeNull();
+  expect(screen.getByRole("img", { name: YOUR_LOCATION })).toBeInTheDocument();
+});
+it.each([false, true])(
+  "uses eased camera movement and honors reduced motion (%s)",
+  (reduced) => {
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: reduced }));
+    const stations = [
+      station,
+      { ...station, id: "two", lng: station.lng + 0.0001 },
+    ];
+    const props = { center, light: false, stations, onSelect: vi.fn() };
+    const { rerender } = render(<MapCanvas {...props} selected={null} />);
+    const motion = expect.objectContaining({
+      duration: reduced ? 0 : 750,
+      easing: expect.any(Function),
+      essential: false,
+    });
+    expect(state.fitBounds).toHaveBeenCalledWith(expect.any(Array), motion);
+    fireEvent.click(screen.getByRole("button", { name: ZOOM_NEARBY }));
+    expect(state.easeTo).toHaveBeenCalledWith(motion);
+    rerender(<MapCanvas {...props} selected={station} />);
+    expect(state.flyTo).toHaveBeenCalledWith(motion);
+    vi.unstubAllGlobals();
+  },
+);
 it("keeps the rest of the UI usable without WebGL", () => {
   state.fail = true;
   render(

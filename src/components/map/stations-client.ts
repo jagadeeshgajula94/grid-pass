@@ -10,7 +10,7 @@ export const stationSchema = z.object({
   network: z.enum(NETWORKS),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
-  distanceKm: z.number().min(0).max(5),
+  distanceKm: z.number().min(0).max(50),
   address: z.string().max(300),
   lastUpdated: z.iso.datetime({ offset: true }),
   amenities: z.array(z.enum(["restroom", "cafe", "dining", "wifi"])),
@@ -35,12 +35,13 @@ function failure(code: ErrorCode, message: string): Result<never, AppError> {
 export async function fetchStations(
   center: Point,
   signal: AbortSignal,
+  radiusKm = 5,
 ): Promise<Result<StationDto[] | null, AppError>> {
   try {
     const query = new URLSearchParams({
       lat: String(center.lat),
       lng: String(center.lng),
-      radiusKm: "5",
+      radiusKm: String(radiusKm),
     });
     const response = await fetch(`/api/stations/nearby?${query}`, { signal });
     if (response.status === 401)

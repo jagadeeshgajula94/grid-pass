@@ -1,4 +1,4 @@
-import type { Map as MapLibreMap } from "maplibre-gl";
+import type { AnimationOptions, Map as MapLibreMap } from "maplibre-gl";
 import {
   boundingBox,
   circleCoordinates,
@@ -8,6 +8,18 @@ import {
 import type { RouteSummaryDto } from "../../domain/route";
 const OUTLINE_LAYER = "radius-outline";
 const FILL_LAYER = "radius-fill";
+export function cameraMotion(): Pick<
+  AnimationOptions,
+  "duration" | "easing" | "essential"
+> {
+  return {
+    duration: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+      ? 0
+      : 750,
+    easing: (time): number => 1 - (1 - time) ** 3,
+    essential: false,
+  };
+}
 function removeLayers(
   map: MapLibreMap,
   source: string,
@@ -21,10 +33,12 @@ export function updateRoute(
   corridor: boolean,
   center: Point,
   route?: RouteSummaryDto,
+  options: { radiusKm?: number; area?: boolean } = {},
 ): void {
   removeLayers(map, "route", ["route-line", "route-casing"]);
   if (!corridor) {
-    updateRing(map, center);
+    if (options.area) removeLayers(map, "radius", [OUTLINE_LAYER, FILL_LAYER]);
+    else updateRing(map, center, options.radiusKm);
     return;
   }
   removeLayers(map, "radius", [OUTLINE_LAYER, FILL_LAYER]);
@@ -75,12 +89,16 @@ export function fitRoute(map: MapLibreMap, route: RouteSummaryDto): void {
               top: window.innerHeight * 0.42,
               bottom: window.innerHeight * 0.25,
             },
-      duration: 900,
+      ...cameraMotion(),
       maxZoom: 13,
     },
   );
 }
-export function updateRing(map: MapLibreMap, center: Point): void {
+export function updateRing(
+  map: MapLibreMap,
+  center: Point,
+  radiusKm = 5,
+): void {
   if (map.getLayer(OUTLINE_LAYER)) map.removeLayer(OUTLINE_LAYER);
   if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER);
   if (map.getSource("radius")) map.removeSource("radius");
@@ -89,7 +107,10 @@ export function updateRing(map: MapLibreMap, center: Point): void {
     data: {
       type: "Feature",
       properties: {},
-      geometry: { type: "Polygon", coordinates: [circleCoordinates(center)] },
+      geometry: {
+        type: "Polygon",
+        coordinates: [circleCoordinates(center, radiusKm)],
+      },
     },
   });
   map.addLayer({
@@ -110,6 +131,38 @@ export function updateRing(map: MapLibreMap, center: Point): void {
     },
   });
 }
+export function updateAccuracy(
+  map: MapLibreMap,
+  position?: Point | null,
+  accuracy?: number | null,
+): void {
+  const source = "location-accuracy";
+  removeLayers(map, source, ["accuracy-outline", "accuracy-fill"]);
+  if (!position || accuracy == null) return;
+  map.addSource(source, {
+    type: "geojson",
+    data: {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "Polygon",
+        coordinates: [circleCoordinates(position, accuracy / 1000)],
+      },
+    },
+  });
+  map.addLayer({
+    id: "accuracy-fill",
+    source,
+    type: "fill",
+    paint: { "fill-color": "#3b82f6", "fill-opacity": 0.12 },
+  });
+  map.addLayer({
+    id: "accuracy-outline",
+    source,
+    type: "line",
+    paint: { "line-color": "#3b82f6", "line-opacity": 0.5, "line-width": 1 },
+  });
+}
 export function fitCenter(map: MapLibreMap, center: Point): void {
   const box = boundingBox(center.lat, center.lng, 5);
   map.fitBounds(
@@ -122,7 +175,7 @@ export function fitCenter(map: MapLibreMap, center: Point): void {
         window.innerWidth >= 768
           ? { left: 370, right: 80, top: 310, bottom: 60 }
           : { left: 25, right: 25, top: 350, bottom: 150 },
-      duration: 1000,
+      ...cameraMotion(),
       maxZoom: 14,
     },
   );

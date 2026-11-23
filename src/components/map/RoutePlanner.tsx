@@ -4,6 +4,8 @@ import type { PlaceDto, RouteSummaryDto } from "../../domain/route";
 import { PlaceAutocomplete } from "./PlaceAutocomplete";
 import { rangeContext } from "./ev-range";
 export interface PlannerProps {
+  searchRequest?: number;
+  onSearchReady?: () => void;
   originName: string;
   destination: PlaceDto | null;
   bufferKm: number;
@@ -112,13 +114,23 @@ function ExpandedSearch({
   );
 }
 export function RoutePlanner(props: PlannerProps): ReactElement {
+  const { searchRequest, onSearchReady } = props;
   const [expanded, setExpanded] = useState(false);
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!searchRequest) return;
+    setExpanded(true);
+    section.current
+      ?.querySelector<HTMLInputElement>('[role="combobox"]')
+      ?.focus();
+    onSearchReady?.();
+  }, [searchRequest, onSearchReady]);
   const expand = (): void => {
     setExpanded(true);
     props.onExpand?.();
   };
   return (
-    <section className="route-planner" aria-label="Route planner">
+    <section ref={section} className="route-planner" aria-label="Route planner">
       {(!props.destination || expanded) && (
         <button
           className="search-pill"
@@ -146,5 +158,39 @@ export function RoutePlanner(props: PlannerProps): ReactElement {
         )}
       </p>
     </section>
+  );
+}
+export function RadarControls({
+  radiusKm,
+  area,
+  onRadius,
+  onBack,
+}: {
+  radiusKm: number;
+  area: boolean;
+  onRadius: (radius: number) => void;
+  onBack: () => void;
+}): ReactElement {
+  return (
+    <div className="radar-controls">
+      {area ? (
+        <button className="area-back" onClick={onBack}>
+          Back to my location
+        </button>
+      ) : (
+        <div className="radius-toggle" role="group" aria-label="Nearby radius">
+          <span>Nearby</span>
+          {[5, 10, 20].map((radius) => (
+            <button
+              key={radius}
+              aria-pressed={radius === radiusKm}
+              onClick={() => onRadius(radius)}
+            >
+              {radius} km
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
