@@ -259,9 +259,31 @@ function useVisibleMap(map: MapLibreMap | null, props: CanvasProps): void {
     return (): void => window.removeEventListener("resize", resize);
   }, [map, props]);
 }
+function exposedMapBounds(
+  map: MapLibreMap,
+  padding: PaddingOptions,
+): BoundingBox {
+  const { clientWidth: width, clientHeight: height } = map.getContainer();
+  const left = Math.min(padding.left, Math.max(0, width - 1));
+  const top = Math.min(padding.top, Math.max(0, height - 1));
+  const right = Math.max(left + 1, width - padding.right);
+  const bottom = Math.max(top + 1, height - padding.bottom);
+  const corners = [
+    [left, top],
+    [right, top],
+    [left, bottom],
+    [right, bottom],
+  ].map(([x = 0, y = 0]) => map.unproject([x, y]));
+  return {
+    west: Math.min(...corners.map((point) => point.lng)),
+    east: Math.max(...corners.map((point) => point.lng)),
+    south: Math.min(...corners.map((point) => point.lat)),
+    north: Math.max(...corners.map((point) => point.lat)),
+  };
+}
 function useMapAreaEvents(map: MapLibreMap | null, props: CanvasProps): void {
   const userMove = useRef(false);
-  const { onArea, corridor, fitRequest, selected } = props;
+  const { onArea, corridor, fitRequest, selected, sheetHeight = 150 } = props;
   useEffect(() => {
     userMove.current = false;
     if (!map) return;
@@ -272,13 +294,7 @@ function useMapAreaEvents(map: MapLibreMap | null, props: CanvasProps): void {
       const user = userMove.current || !!event.originalEvent;
       userMove.current = false;
       if (!user || corridor || !onArea) return;
-      const bounds = map.getBounds();
-      onArea({
-        west: bounds.getWest(),
-        east: bounds.getEast(),
-        south: bounds.getSouth(),
-        north: bounds.getNorth(),
-      });
+      onArea(exposedMapBounds(map, visibleMapPadding(sheetHeight)));
     };
     map.on("movestart", start);
     map.on("moveend", finish);
@@ -286,7 +302,7 @@ function useMapAreaEvents(map: MapLibreMap | null, props: CanvasProps): void {
       map.off("movestart", start);
       map.off("moveend", finish);
     };
-  }, [map, onArea, corridor, fitRequest, selected]);
+  }, [map, onArea, corridor, fitRequest, selected, sheetHeight]);
 }
 export function MapCanvas(props: CanvasProps): ReactElement {
   const { stations, onSelect, corridor = false } = props;

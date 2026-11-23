@@ -28,6 +28,10 @@ const state = vi.hoisted(() => ({
   addLayer: vi.fn(),
   removeLayer: vi.fn(),
   removeSource: vi.fn(),
+  unproject: vi.fn(([x, y]: [number, number]) => ({
+    lng: 78.4 + x / 10000,
+    lat: 17.5 - y / 10000,
+  })),
 }));
 class MockMap {
   constructor() {
@@ -77,6 +81,10 @@ class MockMap {
   getCenter(): typeof center {
     return center;
   }
+  getContainer(): { clientWidth: number; clientHeight: number } {
+    return { clientWidth: window.innerWidth, clientHeight: window.innerHeight };
+  }
+  unproject = state.unproject;
   project([lng, lat]: [number, number]): { x: number; y: number } {
     const scale = (512 * 2 ** state.zoom) / 360;
     return { x: lng * scale, y: -lat * scale };
@@ -501,6 +509,52 @@ it.each([17, 18, 20, 22])(
     expect(state.handlers.get("resize")?.size).toBe(0);
   },
 );
+it.each([
+  {
+    width: 390,
+    height: 800,
+    sheetHeight: 400,
+    left: 48,
+    right: 294,
+    top: 80,
+    bottom: 376,
+  },
+  {
+    width: 1440,
+    height: 900,
+    sheetHeight: 600,
+    left: 424,
+    right: 1360,
+    top: 80,
+    bottom: 860,
+  },
+])(
+  "discovers only the exposed map outside sheet padding at $width px",
+  ({ width, height, sheetHeight, left, right, top, bottom }) => {
+    vi.stubGlobal("innerWidth", width);
+    vi.stubGlobal("innerHeight", height);
+    const onArea = vi.fn();
+    render(
+      <MapCanvas
+        center={center}
+        light={false}
+        stations={[]}
+        selected={null}
+        onSelect={vi.fn()}
+        sheetHeight={sheetHeight}
+        onArea={onArea}
+      />,
+    );
+    emit("movestart", { originalEvent: new MouseEvent("mousedown") });
+    emit("moveend");
+    expect(onArea).toHaveBeenCalledWith({
+      west: expect.closeTo(78.4 + left / 10000),
+      east: expect.closeTo(78.4 + right / 10000),
+      north: expect.closeTo(17.5 - top / 10000),
+      south: expect.closeTo(17.5 - bottom / 10000),
+    });
+  },
+);
 it("only discovers user moves, not initial or programmatic camera movements or routes", () => {
   const onArea = vi.fn();
   const props = {
@@ -517,12 +571,7 @@ it("only discovers user moves, not initial or programmatic camera movements or r
   expect(onArea).not.toHaveBeenCalled();
   emit("movestart", { originalEvent: new MouseEvent("mousedown") });
   emit("moveend");
-  expect(onArea).toHaveBeenCalledWith({
-    west: 78.4,
-    east: 78.6,
-    south: 17.3,
-    north: 17.5,
-  });
+  expect(onArea).toHaveBeenCalledOnce();
   emit("moveend");
   expect(onArea).toHaveBeenCalledOnce();
   rerender(<MapCanvas {...props} corridor />);
