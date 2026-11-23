@@ -500,6 +500,7 @@ it.each([17, 18, 20, 22])(
     fireEvent.click(bubble);
     expect(state.easeTo).toHaveBeenCalledWith(
       expect.objectContaining({ zoom: 22 }),
+      expect.objectContaining({ originalEvent: expect.any(MouseEvent) }),
     );
     emit("move");
     emit("resize");
@@ -553,6 +554,39 @@ it.each([
       north: expect.closeTo(17.5 - top / 10000),
       south: expect.closeTo(17.5 - bottom / 10000),
     });
+  },
+);
+it.each([false, true])(
+  "refreshes area after a cluster tap unless route mode is %s",
+  (corridor) => {
+    const onArea = vi.fn();
+    render(
+      <MapCanvas
+        center={center}
+        light={false}
+        stations={[station, { ...station, id: "second" }]}
+        selected={null}
+        onSelect={vi.fn()}
+        onArea={onArea}
+        corridor={corridor}
+      />,
+    );
+    state.easeTo.mockImplementationOnce(
+      (_options: unknown, eventData?: { originalEvent?: Event }) => {
+        emit("movestart", eventData);
+        emit("moveend", eventData);
+      },
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `Zoom into 2 ${corridor ? "stops" : "stations"}`,
+      }),
+    );
+    expect(onArea).toHaveBeenCalledTimes(corridor ? 0 : 1);
+    expect(state.easeTo).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ originalEvent: expect.any(MouseEvent) }),
+    );
   },
 );
 it("only discovers user moves, not initial or programmatic camera movements or routes", () => {
@@ -678,7 +712,10 @@ it.each([false, true])(
     });
     expect(state.fitBounds).toHaveBeenCalledWith(expect.any(Array), motion);
     fireEvent.click(screen.getByRole("button", { name: ZOOM_NEARBY }));
-    expect(state.easeTo).toHaveBeenCalledWith(motion);
+    expect(state.easeTo).toHaveBeenCalledWith(
+      motion,
+      expect.objectContaining({ originalEvent: expect.any(MouseEvent) }),
+    );
     rerender(<MapCanvas {...props} selected={station} />);
     expect(state.flyTo).toHaveBeenCalledWith(motion);
     vi.unstubAllGlobals();
@@ -719,6 +756,7 @@ it("expands corridor clusters to route-numbered pins with the original selection
   fireEvent.click(cluster);
   expect(state.easeTo).toHaveBeenCalledWith(
     expect.objectContaining({ zoom: expect.any(Number), duration: 750 }),
+    expect.objectContaining({ originalEvent: expect.any(MouseEvent) }),
   );
   expect(onSelect).not.toHaveBeenCalled();
   state.zoom = 21;

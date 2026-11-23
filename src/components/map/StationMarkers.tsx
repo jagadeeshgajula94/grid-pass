@@ -154,12 +154,15 @@ function MarkerContent({
       <button
         className="station-cluster"
         aria-label={`Zoom into ${group.count} ${numbered ? "stops" : "stations"}`}
-        onClick={() =>
-          map.easeTo({
-            ...cameraMotion(),
-            center: entry.marker.getLngLat(),
-            zoom: expansionZoom(map, index, group, numbered),
-          })
+        onClick={(event) =>
+          map.easeTo(
+            {
+              ...cameraMotion(),
+              center: entry.marker.getLngLat(),
+              zoom: expansionZoom(map, index, group, numbered),
+            },
+            { originalEvent: event.nativeEvent },
+          )
         }
       >
         {group.count}
