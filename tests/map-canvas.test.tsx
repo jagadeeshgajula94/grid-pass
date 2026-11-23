@@ -133,6 +133,242 @@ beforeEach(() => {
   state.fail = false;
 });
 afterEach(cleanup);
+it("starts attribution collapsed after loading and leaves its disclosure operable", () => {
+  render(
+    <MapCanvas
+      center={center}
+      light={false}
+      stations={[]}
+      selected={null}
+      onSelect={vi.fn()}
+    />,
+  );
+  const attribution = document.createElement("details");
+  attribution.className = "maplibregl-ctrl-attrib maplibregl-compact-show";
+  attribution.open = true;
+  screen.getByLabelText("Charging stations map").append(attribution);
+  emit("load");
+  expect(attribution.open).toBe(false);
+  expect(attribution).not.toHaveClass("maplibregl-compact-show");
+  attribution.open = true;
+  emit("style.load");
+  expect(attribution.open).toBe(true);
+});
+it.each([150, 422, 764])(
+  "fits phone routes clear of controls and a %i px sheet",
+  (sheetHeight) => {
+    vi.stubGlobal("innerWidth", 390);
+    vi.stubGlobal("innerHeight", 844);
+    render(
+      <MapCanvas
+        center={center}
+        light={false}
+        stations={[]}
+        selected={null}
+        onSelect={vi.fn()}
+        corridor
+        route={corridorFixture.route}
+        sheetHeight={sheetHeight}
+      />,
+    );
+    expect(state.fitBounds).toHaveBeenLastCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        padding: {
+          left: 48,
+          right: 96,
+          top: Math.min(100, Math.max(24, (844 - sheetHeight) * 0.2)),
+          bottom: sheetHeight + 24,
+        },
+      }),
+    );
+    vi.unstubAllGlobals();
+  },
+);
+it("fits above the measured phone sheet and updates padding on resize", () => {
+  vi.stubGlobal("innerWidth", 390);
+  vi.stubGlobal("innerHeight", 844);
+  vi.stubGlobal("matchMedia", () => ({ matches: true }));
+  const { rerender } = render(
+    <MapCanvas
+      center={center}
+      light={false}
+      stations={[]}
+      selected={null}
+      onSelect={vi.fn()}
+      sheetHeight={422}
+    />,
+  );
+  expect(state.fitBounds).toHaveBeenLastCalledWith(
+    expect.any(Array),
+    expect.objectContaining({
+      padding: { left: 48, right: 96, top: 84.4, bottom: 446 },
+      duration: 0,
+    }),
+  );
+  expect(screen.getByLabelText("Charging stations map")).toHaveStyle({
+    "--sheet-offset": "434px",
+  });
+  vi.stubGlobal("innerWidth", 768);
+  fireEvent(window, new Event("resize"));
+  expect(state.fitBounds).toHaveBeenLastCalledWith(
+    expect.any(Array),
+    expect.objectContaining({
+      padding: { left: 424, right: 80, top: 80, bottom: 40 },
+    }),
+  );
+  rerender(
+    <MapCanvas
+      center={center}
+      light={false}
+      stations={[]}
+      selected={station}
+      onSelect={vi.fn()}
+      sheetHeight={422}
+    />,
+  );
+  expect(state.flyTo).toHaveBeenCalledWith(
+    expect.objectContaining({ offset: [190, 0] }),
+  );
+  vi.unstubAllGlobals();
+});
+it.each([false, true])(
+  "preserves the desktop camera on sheet measurements (corridor: %s)",
+  (corridor) => {
+    vi.stubGlobal("innerWidth", 1440);
+    const props = {
+      center,
+      light: false,
+      stations: [],
+      selected: null,
+      onSelect: vi.fn(),
+      corridor,
+      route: corridor ? corridorFixture.route : undefined,
+    };
+    const { rerender } = render(<MapCanvas {...props} sheetHeight={650} />);
+    state.fitBounds.mockClear();
+    emit("moveend");
+    for (const sheetHeight of [150, 650]) {
+      rerender(
+        <MapCanvas
+          {...props}
+          center={{ ...center }}
+          route={props.route ? { ...props.route } : undefined}
+          sheetHeight={sheetHeight}
+        />,
+      );
+      expect(state.fitBounds).not.toHaveBeenCalled();
+    }
+    fireEvent(window, new Event("resize"));
+    expect(state.fitBounds).not.toHaveBeenCalled();
+    const destination = { lat: 18, lng: 82 };
+    rerender(
+      <MapCanvas
+        {...props}
+        center={destination}
+        route={
+          corridor
+            ? { ...corridorFixture.route, coordinates: [center, destination] }
+            : undefined
+        }
+        sheetHeight={650}
+      />,
+    );
+    expect(state.fitBounds).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  },
+);
+it("refits phone padding changes without refitting equal measurements", () => {
+  vi.stubGlobal("innerWidth", 390);
+  vi.stubGlobal("innerHeight", 844);
+  const props = {
+    center,
+    light: false,
+    stations: [],
+    selected: null,
+    onSelect: vi.fn(),
+  };
+  const { rerender } = render(<MapCanvas {...props} sheetHeight={150} />);
+  state.fitBounds.mockClear();
+  rerender(<MapCanvas {...props} sheetHeight={422} />);
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+  expect(state.fitBounds).toHaveBeenLastCalledWith(
+    expect.any(Array),
+    expect.objectContaining({
+      padding: expect.objectContaining({ bottom: 446 }),
+    }),
+  );
+  rerender(<MapCanvas {...props} center={{ ...center }} sheetHeight={422} />);
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+  vi.unstubAllGlobals();
+});
+it("refits explicit recenter requests at unchanged coordinates after a pan", () => {
+  vi.stubGlobal("innerWidth", 1440);
+  const props = {
+    center,
+    light: false,
+    stations: [],
+    selected: null,
+    onSelect: vi.fn(),
+  };
+  const { rerender } = render(<MapCanvas {...props} fitRequest={0} />);
+  state.fitBounds.mockClear();
+  emit("moveend");
+  rerender(<MapCanvas {...props} fitRequest={1} />);
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+  vi.unstubAllGlobals();
+});
+it.each([false, true])(
+  "restores desktop overview after station details close (corridor: %s)",
+  (corridor) => {
+    vi.stubGlobal("innerWidth", 1440);
+    const props = {
+      center,
+      light: false,
+      stations: [],
+      onSelect: vi.fn(),
+      corridor,
+      route: corridor ? corridorFixture.route : undefined,
+    };
+    const { rerender } = render(<MapCanvas {...props} selected={null} />);
+    rerender(<MapCanvas {...props} selected={station} />);
+    expect(state.flyTo).toHaveBeenCalledWith(
+      expect.objectContaining({ zoom: 15 }),
+    );
+    state.fitBounds.mockClear();
+    emit("moveend");
+    rerender(<MapCanvas {...props} selected={null} />);
+    expect(state.fitBounds).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  },
+);
+it("refits route endpoints when a desktop viewport narrows", () => {
+  vi.stubGlobal("innerWidth", 1440);
+  render(
+    <MapCanvas
+      center={center}
+      light={false}
+      stations={[]}
+      selected={null}
+      onSelect={vi.fn()}
+      corridor
+      route={corridorFixture.route}
+    />,
+  );
+  state.fitBounds.mockClear();
+  vi.stubGlobal("innerWidth", 1024);
+  fireEvent(window, new Event("resize"));
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+  expect(state.fitBounds).toHaveBeenLastCalledWith(
+    expect.any(Array),
+    expect.objectContaining({
+      padding: { left: 424, right: 80, top: 80, bottom: 40 },
+    }),
+  );
+  fireEvent(window, new Event("resize"));
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+  vi.unstubAllGlobals();
+});
 it("renders React pins, a center marker and radius; re-adds layers on style changes", () => {
   const onSelect = vi.fn();
   const { rerender, unmount } = render(

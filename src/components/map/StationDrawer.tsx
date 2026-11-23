@@ -71,8 +71,8 @@ function DrawerHeader({
         </span>
         {NETWORK_LABELS[station.network]}
       </span>
-      <button ref={close} onClick={onClose} aria-label="Close station details">
-        ✕
+      <button ref={close} onClick={onClose} aria-label="Back to stations">
+        ← Back
       </button>
     </div>
   );
@@ -104,7 +104,7 @@ export function StationDrawer({
 }): ReactElement {
   return (
     <aside
-      className="station-drawer glass"
+      className="station-drawer"
       role="dialog"
       aria-labelledby="station-title"
     >

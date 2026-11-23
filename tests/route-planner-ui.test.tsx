@@ -19,16 +19,27 @@ import {
   plannerStation,
 } from "./planner-ui-fixtures";
 const NEARBY_RING = "Nearby ring";
+const ROUTE_POLYLINE = "Route polyline";
 const SEARCH_PLACES = "Search places";
 const EXPLICIT_SEARCH_MODE = "mode=search";
 const ARIA_ACTIVE_DESCENDANT = "aria-activedescendant";
 const ARIA_EXPANDED = "aria-expanded";
 const GUEST_RANGE = "Sign in to see range for your EV";
+const FIT_REQUEST = "data-fit-request";
 vi.mock("next/dynamic", () => ({
   default:
     () =>
-    ({ corridor }: { corridor: boolean }): React.ReactElement => (
-      <div aria-label={corridor ? "Route polyline" : "Nearby ring"} />
+    ({
+      corridor,
+      fitRequest,
+    }: {
+      corridor: boolean;
+      fitRequest: number;
+    }): React.ReactElement => (
+      <div
+        aria-label={corridor ? ROUTE_POLYLINE : NEARBY_RING}
+        data-fit-request={fitRequest}
+      />
     ),
 }));
 vi.mock("next/navigation", () => ({
@@ -60,6 +71,9 @@ function mockPlanner(fallback = false): ReturnType<typeof vi.fn<typeof fetch>> {
   return fetcher;
 }
 async function planTrip(): Promise<void> {
+  fireEvent.click(
+    screen.getByRole("button", { name: "Search a place or route" }),
+  );
   fireEvent.change(screen.getByRole("combobox", { name: "Destination" }), {
     target: { value: "Vijay" },
   });
@@ -74,31 +88,32 @@ it("switches to numbered corridor cards, opens the drawer, filters and clears ba
   render(<MapWorkspace firstName="Aarav" evModel="Tata Nexon EV" />);
   await screen.findByText(plannerStation.name);
   expect(screen.getByText("Hello, Aarav")).toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Account"));
   expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
   expect(screen.getByLabelText(NEARBY_RING)).toBeInTheDocument();
   await planTrip();
   expect(screen.queryByLabelText(NEARBY_RING)).toBeNull();
-  expect(screen.getByLabelText("Route polyline")).toBeInTheDocument();
+  expect(screen.getByLabelText(ROUTE_POLYLINE)).toBeInTheDocument();
   expect(
     screen.getByText("1", { selector: ".stop-number" }),
   ).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Highway Charge/ }));
   expect(screen.getByRole("dialog")).toBeInTheDocument();
   fireEvent.keyDown(window, { key: "Escape" });
+  expect(screen.getByRole("button", { name: /Highway Charge/ })).toHaveFocus();
+  fireEvent.click(screen.getByRole("button", { name: /Filters/ }));
   fireEvent.change(screen.getByLabelText("Connector"), {
     target: { value: "CHADEMO" },
   });
+  fireEvent.click(screen.getByRole("button", { name: "Back to stations" }));
   expect(screen.getByText(/No stations match/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Clear Route/ }));
   expect(screen.getByLabelText(NEARBY_RING)).toBeInTheDocument();
   expect(
     screen.getByRole("complementary", { name: "Nearby stations" }),
   ).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "5 km" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  expect(screen.queryByRole("group", { name: "Corridor buffer" })).toBeNull();
 });
 it("refetches on buffer changes and swaps endpoints", async () => {
   const fetcher = mockPlanner();
@@ -113,6 +128,7 @@ it("refetches on buffer changes and swaps endpoints", async () => {
       }),
     ),
   );
+  fireEvent.click(screen.getByRole("button", { name: destination.name }));
   fireEvent.click(
     screen.getByRole("button", { name: "Swap origin and destination" }),
   );
@@ -122,6 +138,23 @@ it("refetches on buffer changes and swaps endpoints", async () => {
   expect(screen.getByRole("combobox", { name: "Destination" })).toHaveValue(
     "Hyderabad",
   );
+});
+it("does not refit or refetch when the active corridor buffer is reselected", async () => {
+  const fetcher = mockPlanner();
+  render(<MapWorkspace />);
+  await planTrip();
+  for (const buffer of [5, 10, 2]) {
+    const button = screen.getByRole("button", { name: `${buffer} km` });
+    fireEvent.click(button);
+    await waitFor(() => expect(button).toHaveAttribute("aria-pressed", "true"));
+    const route = screen.getByLabelText(ROUTE_POLYLINE);
+    const request = route.getAttribute(FIT_REQUEST);
+    expect(request).not.toBeNull();
+    const requests = fetcher.mock.calls.length;
+    fireEvent.click(button);
+    expect(route).toHaveAttribute(FIT_REQUEST, request);
+    expect(fetcher).toHaveBeenCalledTimes(requests);
+  }
 });
 it("debounces autocomplete, aborts obsolete requests and supports keyboard selection", async () => {
   vi.useFakeTimers();

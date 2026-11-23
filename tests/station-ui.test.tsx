@@ -122,12 +122,10 @@ it("renders hostile station names as text, safe navigation URLs and status color
   expect(screen.getByText("CHAdeMO · 120 kW")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Reserve/ })).toBeDisabled();
   fireEvent.keyDown(window, { key: "Escape" });
-  fireEvent.click(
-    screen.getByRole("button", { name: "Close station details" }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: "Back to stations" }));
   expect(onClose).toHaveBeenCalledTimes(2);
 });
-it("selects pins and list rows and toggles the mobile sheet", () => {
+it("selects pins and list rows without a nested sheet handle", () => {
   const onSelect = vi.fn();
   render(
     <>
@@ -138,9 +136,7 @@ it("selects pins and list rows and toggles the mobile sheet", () => {
   fireEvent.click(screen.getByRole("button", { name: /1 of 3 ports/ }));
   fireEvent.click(screen.getByRole("button", { name: /Statiq/ }));
   expect(onSelect).toHaveBeenCalledTimes(2);
-  const handle = screen.getByRole("button", { name: /Explore/ });
-  fireEvent.click(handle);
-  expect(handle).toHaveAttribute("aria-expanded", "true");
+  expect(screen.queryByRole("slider")).toBeNull();
   expect(stationSummary({ ...station, connectors: [busyPort] }).status).toBe(
     "busy",
   );
@@ -152,7 +148,7 @@ it("renders an empty station list", () => {
 });
 it("updates all filter controls", () => {
   const onChange = vi.fn();
-  render(<FilterBar filters={DEFAULT_FILTERS} onChange={onChange} />);
+  render(<FilterBar filters={DEFAULT_FILTERS} onChange={onChange} expanded />);
   for (const name of ["CCS2", "Type 2", "CHAdeMO"]) {
     expect(screen.getByRole("option", { name })).toBeInTheDocument();
   }
@@ -168,7 +164,7 @@ it("updates all filter controls", () => {
   fireEvent.click(screen.getByLabelText("Available Now"));
   expect(onChange.mock.calls.map((call) => call[0])).toEqual([
     { ...DEFAULT_FILTERS, connector: "CCS2" },
-    { ...DEFAULT_FILTERS, speed: "ultra" },
+    { ...DEFAULT_FILTERS, speed: "ultra", minimumPowerKw: 0 },
     { ...DEFAULT_FILTERS, network: "zeon" },
     { ...DEFAULT_FILTERS, availableOnly: true },
   ]);

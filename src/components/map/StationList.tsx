@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from "react";
+import type { ReactElement } from "react";
 import type { StationDto } from "../../domain/station";
 import { NETWORK_LABELS } from "../../domain/station";
 import { stationSummary } from "./station-display";
@@ -13,7 +13,11 @@ function StationResult({
 }): ReactElement {
   const summary = stationSummary(station);
   return (
-    <button className="station-result" onClick={() => onSelect(station)}>
+    <button
+      className="station-result"
+      data-station-id={station.id}
+      onClick={() => onSelect(station)}
+    >
       <span className="result-topline">
         {NETWORK_LABELS[station.network]}
         <span>{station.distanceKm.toFixed(1)} km</span>
@@ -91,20 +95,12 @@ export function StationList({
   bufferKm = 5,
   loading = false,
 }: StationListProps): ReactElement {
-  const [expanded, setExpanded] = useState(false);
   return (
     <aside
-      className={`station-list glass ${expanded ? "expanded" : ""}`}
+      className="station-list"
       aria-label={corridor ? "Corridor stations" : "Nearby stations"}
       aria-busy={loading}
     >
-      <button
-        className="sheet-handle"
-        onClick={() => setExpanded(!expanded)}
-        aria-expanded={expanded}
-      >
-        {expanded ? "⌄ Hide" : "⌃ Explore"} {stations.length} stations
-      </button>
       <div className="list-heading">
         <h2>{corridor ? "Charging stops" : "Nearby charging"}</h2>
         <span>
