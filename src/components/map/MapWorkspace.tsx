@@ -29,6 +29,8 @@ import { useCorridor } from "./use-corridor";
 import { useMapArea } from "./use-map-area";
 import { LocationBanner } from "./LocationBanner";
 import { RadarControls } from "./RoutePlanner";
+import type { RecommendationContext } from "../../domain/recommendation";
+import { AssistantButton, ChargeAssistant } from "./ChargeAssistant";
 const MapCanvas = dynamic(
   () => import("./MapCanvas").then((module) => module.MapCanvas),
   { ssr: false },
@@ -335,10 +337,12 @@ function WorkspaceMap({
   state,
   sheet,
   sheetHeight,
+  assistant,
 }: {
   state: WorkspaceState;
   sheet: ReturnType<typeof useSheet>;
   sheetHeight: number;
+  assistant: ReturnType<typeof useAssistantView>;
 }): ReactElement {
   return (
     <MapCanvas
@@ -352,7 +356,10 @@ function WorkspaceMap({
       light={state.light}
       stations={state.filtered}
       selected={state.selected}
+      highlighted={assistant.highlighted}
+      highlightRequest={assistant.highlightRequest}
       onSelect={(station): void => {
+        assistant.close();
         state.setSelected(station);
         sheet.setSnap("half");
       }}
@@ -360,6 +367,130 @@ function WorkspaceMap({
       route={state.route}
       sheetHeight={sheetHeight}
     />
+  );
+}
+export function assistantContext(state: {
+  planner: Pick<WorkspaceState["planner"], "destination" | "bufferKm">;
+  search: Pick<WorkspaceState["search"], "center">;
+  discovery: Pick<DiscoveryState, "area" | "center" | "radiusKm">;
+}): RecommendationContext {
+  const destination = state.planner.destination;
+  const origin = state.search.center;
+  const center = state.discovery.center;
+  if (destination)
+    return {
+      mode: "route",
+      origin: { lat: origin.lat, lng: origin.lng },
+      destination: { lat: destination.lat, lng: destination.lng },
+      destinationName: destination.name.trim().slice(0, 160),
+      bufferKm: state.planner.bufferKm,
+    };
+  return {
+    mode: state.discovery.area ? "area" : "nearby",
+    center: { lat: center.lat, lng: center.lng },
+    radiusKm: state.discovery.radiusKm,
+  };
+}
+function useAssistantView(
+  state: WorkspaceState,
+  sheet: ReturnType<typeof useSheet>,
+): {
+  opened: boolean;
+  highlighted: StationDto | null;
+  highlightRequest: number;
+  open: () => void;
+  close: () => void;
+  show: (station: StationDto) => void;
+  reset: () => void;
+} {
+  const [opened, setOpened] = useState(false);
+  const [highlighted, setHighlighted] = useState<StationDto | null>(null);
+  const [highlightRequest, setHighlightRequest] = useState(0);
+  const reset = useCallback((): void => setHighlighted(null), []);
+  useEffect(reset, [state.fitRequest, reset]);
+  const previous = useRef(false);
+  const selected = state.selected;
+  useEffect(() => {
+    if (previous.current && !opened && !selected)
+      document.querySelector<HTMLButtonElement>(".assistant-trigger")?.focus();
+    previous.current = opened;
+  }, [opened, selected]);
+  return {
+    opened,
+    highlighted,
+    highlightRequest,
+    reset,
+    open: (): void => {
+      state.close();
+      setHighlighted(null);
+      setOpened(true);
+      sheet.setSnap("full");
+    },
+    close: (): void => {
+      setOpened(false);
+      setHighlighted(null);
+      sheet.setSnap("half");
+    },
+    show: (station): void => {
+      setHighlighted(station);
+      setHighlightRequest((request) => request + 1);
+      sheet.setSnap("half");
+    },
+  };
+}
+function WorkspacePanel({
+  assistant,
+  onHeight,
+  onSearch,
+  ...props
+}: ContentProps & {
+  assistant: ReturnType<typeof useAssistantView>;
+  onHeight: (height: number) => void;
+  onSearch: () => void;
+}): ReactElement {
+  const { state, sheet, evModel } = props;
+  return (
+    <BottomSheet sheet={sheet} onHeight={onHeight}>
+      <LocationBanner
+        errorKind={state.search.errorKind}
+        onRetry={state.planner.onCurrent}
+        onSearch={onSearch}
+      />
+      {assistant.opened ? (
+        <ChargeAssistant
+          context={assistantContext(state)}
+          evModel={evModel}
+          onBack={assistant.close}
+          onShow={assistant.show}
+          onReset={assistant.reset}
+        />
+      ) : (
+        <WorkspaceContent {...props} />
+      )}
+    </BottomSheet>
+  );
+}
+function WorkspaceActions({
+  state,
+  sheet,
+  assistant,
+  firstName,
+}: {
+  state: WorkspaceState;
+  sheet: ReturnType<typeof useSheet>;
+  assistant: ReturnType<typeof useAssistantView>;
+  firstName?: string;
+}): ReactElement {
+  return (
+    <>
+      <MapControls
+        firstName={firstName}
+        onTheme={state.setLight}
+        onRecenter={state.planner.onCurrent}
+        fullSheet={sheet.snap === "full"}
+      />
+      {!assistant.opened && <AssistantButton onClick={assistant.open} />}
+    </>
   );
 }
 export function MapWorkspace({
@@ -371,35 +502,38 @@ export function MapWorkspace({
 }): ReactElement {
   const state = useWorkspace();
   const sheet = useSheet();
+  const assistant = useAssistantView(state, sheet);
   const [sheetHeight, setSheetHeight] = useState(150);
   const [searchRequest, setSearchRequest] = useState(0);
   const searchReady = useCallback((): void => setSearchRequest(0), []);
   return (
     <main className="map-workspace">
-      <WorkspaceMap state={state} sheet={sheet} sheetHeight={sheetHeight} />
-      <MapControls
-        firstName={firstName}
-        onTheme={state.setLight}
-        onRecenter={state.planner.onCurrent}
-        fullSheet={sheet.snap === "full"}
+      <WorkspaceMap
+        state={state}
+        sheet={sheet}
+        sheetHeight={sheetHeight}
+        assistant={assistant}
       />
-      <BottomSheet sheet={sheet} onHeight={setSheetHeight}>
-        <LocationBanner
-          errorKind={state.search.errorKind}
-          onRetry={state.planner.onCurrent}
-          onSearch={() => {
-            setSearchRequest((request) => request + 1);
-            sheet.setSnap("full");
-          }}
-        />
-        <WorkspaceContent
-          state={state}
-          evModel={evModel}
-          sheet={sheet}
-          searchRequest={searchRequest}
-          onSearchReady={searchReady}
-        />
-      </BottomSheet>
+      <WorkspaceActions
+        state={state}
+        sheet={sheet}
+        assistant={assistant}
+        firstName={firstName}
+      />
+      <WorkspacePanel
+        state={state}
+        sheet={sheet}
+        evModel={evModel}
+        assistant={assistant}
+        onHeight={setSheetHeight}
+        onSearch={() => {
+          assistant.close();
+          setSearchRequest((request) => request + 1);
+          sheet.setSnap("full");
+        }}
+        searchRequest={searchRequest}
+        onSearchReady={searchReady}
+      />
     </main>
   );
 }

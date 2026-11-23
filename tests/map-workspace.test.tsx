@@ -9,7 +9,13 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { MapWorkspace } from "../src/components/map/MapWorkspace";
+import {
+  MapWorkspace,
+  assistantContext,
+} from "../src/components/map/MapWorkspace";
+import { assistantResponse } from "./recommendation-fixtures";
+import { recommendationSchema } from "../src/validation/recommendation.schema";
+import { destination } from "./planner-ui-fixtures";
 import { useLocation } from "../src/components/map/use-location";
 import { useStations } from "../src/components/map/use-stations";
 import type { StationDto } from "../src/domain/station";
@@ -28,6 +34,110 @@ const FALLBACK_ORIGIN = "Hyderabad — location unavailable";
 const THEME_TOGGLE = "Toggle color theme";
 const SEARCH_PROMPT = "Search a place or route";
 const CURRENT_LOCATION = "Current location";
+const CHARGE_ASSISTANT = "Charge assistant";
+const FIND_STOPS = "Find charging stops";
+it("chooses route before map area, otherwise area or the selected radar centre/radius", () => {
+  const center = { lat: 17.517, lng: 78.385 };
+  const state = {
+    planner: { destination: null, bufferKm: 10 },
+    search: { center: { ...center, id: "searched-origin", name: "Nizampet" } },
+    discovery: {
+      center: { lat: 17.52, lng: 78.4, id: "searched-area", name: "Area" },
+      radiusKm: 2,
+      area: { center, radiusKm: 2 },
+    },
+  };
+  expect(assistantContext(state)).toEqual({
+    mode: "area",
+    center: { lat: 17.52, lng: 78.4 },
+    radiusKm: 2,
+  });
+  expect(
+    assistantContext({ ...state, planner: { ...state.planner, destination } }),
+  ).toEqual({
+    mode: "route",
+    origin: center,
+    destination: { lat: destination.lat, lng: destination.lng },
+    destinationName: destination.name,
+    bufferKm: 10,
+  });
+  expect(
+    assistantContext({
+      ...state,
+      discovery: { ...state.discovery, area: null, radiusKm: 20 },
+    }),
+  ).toEqual({
+    mode: "nearby",
+    center: { lat: 17.52, lng: 78.4 },
+    radiusKm: 20,
+  });
+  expect(
+    recommendationSchema.safeParse({
+      batteryPercent: 35,
+      context: assistantContext(state),
+    }).success,
+  ).toBe(true);
+});
+it("normalizes long geocoded destination names before sending assistant context", () => {
+  const center = { lat: 17.517, lng: 78.385 };
+  const context = assistantContext({
+    planner: {
+      destination: { ...destination, name: `  ${"V".repeat(200)}  ` },
+      bufferKm: 5,
+    },
+    search: { center },
+    discovery: { center, radiusKm: 5, area: null },
+  });
+  expect(context).toMatchObject({ destinationName: "V".repeat(160) });
+  expect(
+    recommendationSchema.safeParse({ batteryPercent: 60, context }).success,
+  ).toBe(true);
+});
+it("opens the assistant, sends radar context, highlights a result and returns focus on Back", async () => {
+  mockNizampet();
+  const fetcher = vi.fn((url: string, init?: RequestInit) =>
+    Promise.resolve(
+      url.includes("recommendations") && init?.method === "POST"
+        ? Response.json(assistantResponse)
+        : response(),
+    ),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  render(<MapWorkspace evModel="Tata Nexon EV" firstName="Driver" />);
+  await screen.findByText(STATION_NAME);
+  fireEvent.click(screen.getByRole("button", { name: "10 km" }));
+  fireEvent.click(screen.getByRole("button", { name: CHARGE_ASSISTANT }));
+  expect(
+    screen.getByRole("heading", { name: CHARGE_ASSISTANT }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Chargers within 10 km")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: FIND_STOPS }));
+  const show = await screen.findByRole("button", { name: /Show .* on map/ });
+  const post = fetcher.mock.calls.find(([url]) =>
+    url.includes("recommendations"),
+  );
+  const payload: unknown = JSON.parse(String(post?.[1]?.body));
+  expect(recommendationSchema.parse(payload).context).toEqual({
+    mode: "nearby",
+    center: { lat: 17.517, lng: 78.385 },
+    radiusKm: 10,
+  });
+  fireEvent.click(show);
+  expect(latestMap().highlighted?.id).toBe(
+    assistantResponse.recommendations[0]?.station.id,
+  );
+  fireEvent.change(screen.getByLabelText("Battery percentage"), {
+    target: { value: "3" },
+  });
+  expect(latestMap().highlighted).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  expect(screen.getByRole("button", { name: CHARGE_ASSISTANT })).toHaveFocus();
+  expect(document.querySelector(".bottom-sheet")).toHaveAttribute(
+    "data-snap",
+    "half",
+  );
+  expect(latestMap().highlighted).toBeNull();
+});
 function mockNizampet(): ReturnType<typeof vi.fn> {
   const getCurrentPosition = vi.fn((accept) =>
     accept({ coords: { latitude: 17.517, longitude: 78.385, accuracy: 40 } }),
@@ -38,6 +148,34 @@ function mockNizampet(): ReturnType<typeof vi.fn> {
   });
   return getCurrentPosition;
 }
+it("issues a fresh preview after panning to an area and clears it on Current location", async () => {
+  mockAssistantArea(STATION_NAME);
+  render(<MapWorkspace evModel="Tata Nexon EV" />);
+  await screen.findByText(STATION_NAME);
+  fireEvent.click(screen.getByRole("button", { name: CHARGE_ASSISTANT }));
+  fireEvent.click(screen.getByRole("button", { name: FIND_STOPS }));
+  const show = await screen.findByRole("button", { name: /Show .* on map/ });
+  fireEvent.click(show);
+  const request = latestMap().highlightRequest;
+  act(() =>
+    latestMap().onArea?.({
+      south: 17.5,
+      north: 17.52,
+      west: 78.37,
+      east: 78.39,
+    }),
+  );
+  fireEvent.click(show);
+  expect(latestMap().highlightRequest).toBe((request ?? 0) + 1);
+  expect(latestMap().highlighted).not.toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: CURRENT_LOCATION }));
+  expect(latestMap()).toMatchObject({
+    highlighted: null,
+    area: false,
+    fitRequest: 1,
+    center: { lat: 17.517, lng: 78.385 },
+  });
+});
 function latestMap(): Parameters<typeof MapCanvas>[0] {
   const props = mapCanvas.mock.lastCall?.[0];
   if (!props) throw new Error("Map has not rendered");
@@ -62,9 +200,9 @@ const station: StationDto = {
   amenities: [],
   lastUpdated: "2026-01-01T00:00:00.000Z",
 };
-function response(): Response {
+function response(name = STATION_NAME): Response {
   return Response.json({
-    stations: [station],
+    stations: [{ ...station, name }],
     center: { lat: station.lat, lng: station.lng },
     radiusKm: 5,
     sources: ["local"],
@@ -79,6 +217,68 @@ afterEach(() => {
   Object.defineProperty(navigator, "geolocation", {
     configurable: true,
     value: undefined,
+  });
+});
+function mockAssistantArea(previewStation: string): ReturnType<typeof vi.fn> {
+  mockNizampet();
+  const fetcher = vi.fn((url: string) => {
+    if (url.includes("recommendations"))
+      return Promise.resolve(
+        Response.json({ ...assistantResponse, contextMode: "area" }),
+      );
+    return Promise.resolve(
+      response(url.includes("lat=17.53") ? previewStation : STATION_NAME),
+    );
+  });
+  vi.stubGlobal("fetch", fetcher);
+  return fetcher;
+}
+it("keeps previewed assistant stops highlighted while the area refreshes, then shows that area after Back", async () => {
+  const previewStation = "Preview area charger";
+  const fetcher = mockAssistantArea(previewStation);
+  render(<MapWorkspace evModel="Tata Nexon EV" />);
+  await screen.findByText(STATION_NAME);
+  vi.useFakeTimers();
+  act(() =>
+    latestMap().onArea?.({
+      south: 17.5,
+      north: 17.52,
+      west: 78.37,
+      east: 78.39,
+    }),
+  );
+  await moveTime(1500);
+  fireEvent.click(screen.getByRole("button", { name: CHARGE_ASSISTANT }));
+  fireEvent.click(screen.getByRole("button", { name: FIND_STOPS }));
+  await moveTime(0);
+  fireEvent.click(screen.getByRole("button", { name: /Show .* on map/ }));
+  const highlighted = latestMap().highlighted;
+  expect(highlighted).not.toBeNull();
+  act(() =>
+    latestMap().onArea?.({
+      south: 17.52,
+      north: 17.54,
+      west: 78.37,
+      east: 78.39,
+    }),
+  );
+  await moveTime(1500);
+  expect(
+    screen.getByRole("region", { name: "Charging recommendations" }),
+  ).toBeInTheDocument();
+  expect(latestMap().highlighted).toEqual(highlighted);
+  expect(
+    fetcher.mock.calls.filter(([url]) => url.includes("recommendations")),
+  ).toHaveLength(1);
+  fireEvent.click(screen.getByRole("button", { name: "Back" }));
+  expect(
+    screen.getByRole("heading", { name: "In this area" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText(previewStation)).toBeInTheDocument();
+  expect(latestMap()).toMatchObject({
+    area: true,
+    center: { lat: 17.53, lng: 78.38 },
+    highlighted: null,
   });
 });
 it("falls back when geolocation is missing and ignores obsolete requests", () => {

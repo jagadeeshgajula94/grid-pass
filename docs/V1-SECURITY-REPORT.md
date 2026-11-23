@@ -134,6 +134,37 @@ on restart and is not production identity storage. Seed availability and detours
 are estimates. Browser mode/theme/drawer screenshots were captured in Part 2;
 mobile, accessibility tooling and sustained-load testing were not performed here.
 
+## PR B: public guided charging recommendations
+
+- Public `POST /api/recommendations/charging` passes the existing exact trusted
+  Origin check, nonce/security headers and 60/IP/minute API limit, plus a dedicated
+  10/IP/minute sliding window (429 with Retry-After). Invalid/missing Origin is
+  403 even for guests. Limiters remain bounded and process-local, not distributed.
+- `recommendation-http` uses `publicApi`, the bounded 4 KiB JSON reader and strict
+  Zod validation: finite battery 1–100, optional model from the registration enum,
+  bounded coordinates and a discriminated route/area/nearby context. Unknown fields,
+  invalid models, ranges and buffers are rejected. An active session is resolved
+  server-side from the HttpOnly session cookie and its stored user model overrides
+  the body's model. Without a valid session or body model the endpoint returns 400
+  asking for an EV model. Body/model claims grant no charging authority.
+- Handlers call a deterministic recommendation service, which uses existing
+  station/route services and repositories. No request-supplied URLs, arbitrary
+  fetches, new egress hosts, AI vendors, paid dependencies or relaxed SSRF controls
+  were added. Results are allowlisted DTOs and `no-store`; logs contain only the
+  existing correlation/event/status metadata, not battery, coordinates, profile
+  bodies or session tokens. The UI validates response DTOs and renders escaped
+  React text; cancellations ignore stale responses.
+- Vehicle figures, road factors, availability, charge time and taper are estimates,
+  not a safety guarantee or reservation. The algorithm requires compatible available
+  ports and a 10% arrival reserve, and plainly reports nothing reachable. Area
+  estimates start from the selected area's centre. Demo availability is labeled.
+  This is public discovery only; no Start charging/payment UI or endpoint exists.
+  Future charging must require active-session and resource/payment authorization.
+- Regression coverage includes reserve boundaries, AC/DC compatibility and caps,
+  nearby/area/route ranking, fallback roads, empty/unreachable states, public access,
+  session model precedence, validation, Origin 403, rate-limit 429, cancellation,
+  client response validation, guided input/results/Back and map highlighting.
+
 ## Planned V2 security checklist (not implemented)
 
 - **Centralized UPI wallet:** legal/RBI/PPI and licensed-partner assessment before

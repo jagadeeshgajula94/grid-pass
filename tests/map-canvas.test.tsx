@@ -155,11 +155,15 @@ function emit(event: string, payload?: { originalEvent?: Event }): void {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  state.flyTo.mockReset();
   state.handlers.clear();
   state.zoom = 12;
   state.fail = false;
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 it("starts attribution collapsed after loading and leaves its disclosure operable", () => {
   render(
     <MapCanvas
@@ -258,6 +262,33 @@ it("fits above the measured phone sheet and updates padding on resize", () => {
     expect.objectContaining({ offset: [190, 0] }),
   );
   vi.unstubAllGlobals();
+});
+it("repeats a preview request for the same charger and lets recenter override its highlight", () => {
+  vi.useFakeTimers();
+  const props = {
+    center,
+    light: false,
+    stations: [station],
+    selected: null,
+    highlighted: station,
+    onSelect: vi.fn(),
+  };
+  const { rerender } = render(
+    <MapCanvas {...props} highlightRequest={1} fitRequest={0} />,
+  );
+  act(() => vi.advanceTimersByTime(100));
+  state.flyTo.mockClear();
+  rerender(<MapCanvas {...props} highlightRequest={2} fitRequest={0} />);
+  act(() => vi.advanceTimersByTime(100));
+  expect(state.flyTo).toHaveBeenCalledOnce();
+  state.fitBounds.mockClear();
+  rerender(<MapCanvas {...props} highlightRequest={2} fitRequest={1} />);
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+  rerender(<MapCanvas {...props} highlightRequest={3} fitRequest={1} />);
+  rerender(<MapCanvas {...props} highlightRequest={3} fitRequest={2} />);
+  state.flyTo.mockClear();
+  act(() => vi.advanceTimersByTime(100));
+  expect(state.flyTo).not.toHaveBeenCalled();
 });
 it.each([false, true])(
   "preserves the desktop camera on sheet measurements (corridor: %s)",
@@ -784,6 +815,186 @@ it("expands corridor clusters to route-numbered pins with the original selection
   unmount();
   expect(state.handlers.get("moveend")?.size).toBe(0);
 });
+it.each([
+  ["area", true, false, 1],
+  ["radar", false, false, 0],
+  ["route", true, true, 0],
+] as const)(
+  "refreshes assistant %s bounds only after the highlight camera settles",
+  (_mode, area, corridor, count) => {
+    vi.useFakeTimers();
+    const onArea = vi.fn();
+    const props = {
+      center,
+      light: false,
+      stations: [station],
+      selected: null,
+      onSelect: vi.fn(),
+      onArea,
+      area,
+      corridor,
+    };
+    const { rerender, unmount } = render(
+      <MapCanvas {...props} sheetHeight={422} />,
+    );
+    let movement:
+      { originalEvent?: Event; recommendationAreaMove?: boolean } | undefined;
+    state.flyTo.mockImplementation(
+      (_options: unknown, eventData?: typeof movement) => {
+        if (movement)
+          for (const handler of state.handlers.get("moveend") ?? [])
+            handler(movement);
+        movement = eventData;
+        for (const handler of state.handlers.get("movestart") ?? [])
+          handler(eventData);
+      },
+    );
+    rerender(<MapCanvas {...props} sheetHeight={422} highlighted={station} />);
+    expect(onArea).not.toHaveBeenCalled();
+    rerender(<MapCanvas {...props} sheetHeight={450} highlighted={station} />);
+    expect(onArea).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(100));
+    state.unproject.mockClear();
+    emit("moveend", movement);
+    expect(onArea).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(400));
+    expect(onArea).toHaveBeenCalledTimes(count);
+    expect(state.unproject).toHaveBeenCalledTimes(count * 4);
+    emit("moveend");
+    expect(onArea).toHaveBeenCalledTimes(count);
+    emit("movestart", movement);
+    emit("moveend", movement);
+    unmount();
+    act(() => vi.advanceTimersByTime(400));
+    expect(onArea).toHaveBeenCalledTimes(count);
+  },
+);
+it("refreshes an area highlight that finishes immediately as the map becomes ready", () => {
+  vi.useFakeTimers();
+  const onArea = vi.fn();
+  state.flyTo.mockImplementation(
+    (
+      _options: unknown,
+      eventData?: { originalEvent?: Event; recommendationAreaMove?: boolean },
+    ) => {
+      for (const type of ["movestart", "moveend"])
+        for (const handler of state.handlers.get(type) ?? [])
+          handler(eventData);
+    },
+  );
+  render(
+    <MapCanvas
+      center={center}
+      light={false}
+      stations={[station]}
+      selected={null}
+      onSelect={vi.fn()}
+      onArea={onArea}
+      area
+      highlighted={station}
+    />,
+  );
+  expect(onArea).not.toHaveBeenCalled();
+  act(() => vi.advanceTimersByTime(500));
+  expect(onArea).toHaveBeenCalledOnce();
+});
+it.each([false, true])(
+  "keeps the latest preview centered on phone resize until a user pan supersedes it (route: %s)",
+  (corridor) => {
+    vi.useFakeTimers();
+    mockPhoneMotion(false);
+    const props = {
+      center,
+      light: false,
+      stations: [station],
+      selected: null,
+      highlighted: station,
+      highlightRequest: 1,
+      corridor,
+      route: corridorFixture.route,
+      onSelect: vi.fn(),
+    };
+    const { rerender } = render(<MapCanvas {...props} sheetHeight={422} />);
+    act(() => vi.advanceTimersByTime(100));
+    state.fitBounds.mockClear();
+    rerender(<MapCanvas {...props} sheetHeight={764} />);
+    act(() => vi.advanceTimersByTime(100));
+    expect(state.flyTo).toHaveBeenCalledTimes(2);
+    expect(state.flyTo).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        center: [station.lng, station.lat],
+        padding: { left: 48, right: 96, top: 24, bottom: 788 },
+      }),
+      undefined,
+    );
+    expect(state.fitBounds).not.toHaveBeenCalled();
+    emit("movestart", { originalEvent: new MouseEvent("mousedown") });
+    emit("moveend");
+    rerender(<MapCanvas {...props} sheetHeight={422} />);
+    act(() => vi.advanceTimersByTime(100));
+    expect(state.flyTo).toHaveBeenCalledTimes(2);
+    expect(state.fitBounds).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  },
+);
+function mockPhoneMotion(reduced: boolean): void {
+  vi.stubGlobal("innerWidth", 390);
+  vi.stubGlobal("innerHeight", 844);
+  vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: reduced }));
+}
+it.each([false, true])(
+  "flies to and highlights an assistant result above the current sheet, reduced motion %s",
+  (reduced) => {
+    vi.useFakeTimers();
+    mockPhoneMotion(reduced);
+    const props = {
+      center,
+      light: false,
+      stations: [station],
+      selected: null,
+      onSelect: vi.fn(),
+      area: true,
+    };
+    const { rerender, unmount } = render(
+      <MapCanvas {...props} sheetHeight={422} />,
+    );
+    state.fitBounds.mockClear();
+    rerender(<MapCanvas {...props} sheetHeight={422} highlighted={station} />);
+    act(() => vi.advanceTimersByTime(100));
+    expect(
+      screen.getByRole("img", { name: `Recommended charger: ${station.name}` }),
+    ).toBeInTheDocument();
+    expect(state.flyTo).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        center: [station.lng, station.lat],
+        zoom: 15,
+        duration: reduced ? 0 : 750,
+        padding: { left: 48, right: 96, top: 84.4, bottom: 446 },
+        offset: [0, 0],
+      }),
+      { recommendationAreaMove: true },
+    );
+    rerender(
+      <MapCanvas
+        {...props}
+        sheetHeight={764}
+        highlighted={station}
+        highlightRequest={1}
+      />,
+    );
+    act(() => vi.advanceTimersByTime(100));
+    expect(state.flyTo).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        padding: { left: 48, right: 96, top: 24, bottom: 788 },
+      }),
+      { recommendationAreaMove: true },
+    );
+    rerender(<MapCanvas {...props} sheetHeight={422} />);
+    expect(state.fitBounds).not.toHaveBeenCalled();
+    unmount();
+    vi.unstubAllGlobals();
+  },
+);
 it("hides the nearby ring in corridor mode, draws the route and restores nearby on clear", () => {
   const props = {
     center,

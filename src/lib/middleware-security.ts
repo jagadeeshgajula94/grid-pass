@@ -8,12 +8,14 @@ let apiLimiter = new RateLimiter();
 let authLimiter = new SlidingWindowLimiter();
 let geocodeLimiter = new SlidingWindowLimiter(30, 60_000);
 let corridorLimiter = new SlidingWindowLimiter(10, 60_000);
+let recommendationLimiter = new SlidingWindowLimiter(10, 60_000);
 const AUTH_PATHS = ["/api/auth/login", "/api/auth/register"];
 export function resetLimiters(): void {
   apiLimiter = new RateLimiter();
   authLimiter = new SlidingWindowLimiter();
   geocodeLimiter = new SlidingWindowLimiter(30, 60_000);
   corridorLimiter = new SlidingWindowLimiter(10, 60_000);
+  recommendationLimiter = new SlidingWindowLimiter(10, 60_000);
 }
 function limitedResponse(result: {
   isAllowed: boolean;
@@ -42,6 +44,8 @@ export function checkApi(request: NextRequest): NextResponse | undefined {
     return limitedResponse(geocodeLimiter.consume(clientIp(request)));
   if (path === "/api/routes/corridor")
     return limitedResponse(corridorLimiter.consume(clientIp(request)));
+  if (path === "/api/recommendations/charging")
+    return limitedResponse(recommendationLimiter.consume(clientIp(request)));
   if (request.method === "POST" && AUTH_PATHS.includes(path))
     return limitedResponse(authLimiter.consume(`${path}:${clientIp(request)}`));
   return undefined;
