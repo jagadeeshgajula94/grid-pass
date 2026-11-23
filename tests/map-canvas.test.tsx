@@ -578,6 +578,25 @@ it("only discovers user moves, not initial or programmatic camera movements or r
   emit("moveend", { originalEvent: new WheelEvent("wheel") });
   expect(onArea).toHaveBeenCalledOnce();
 });
+it("keeps the area camera when station details close", () => {
+  const props = {
+    center,
+    light: false,
+    stations: [station],
+    selected: null,
+    onSelect: vi.fn(),
+  };
+  const { rerender } = render(<MapCanvas {...props} area />);
+  rerender(<MapCanvas {...props} area selected={station} />);
+  expect(state.flyTo).toHaveBeenCalledOnce();
+  state.fitBounds.mockClear();
+  state.flyTo.mockClear();
+  rerender(<MapCanvas {...props} area />);
+  expect(state.fitBounds).not.toHaveBeenCalled();
+  expect(state.flyTo).not.toHaveBeenCalled();
+  rerender(<MapCanvas {...props} />);
+  expect(state.fitBounds).toHaveBeenCalledOnce();
+});
 it("draws the selected radar radius, hides it in area mode and preserves a panned area", () => {
   const props = {
     center,

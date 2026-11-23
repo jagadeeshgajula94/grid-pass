@@ -217,9 +217,9 @@ function needsOverview(
     !next.selected &&
     (!previous ||
       previous.map !== next.map ||
-      previous.selected ||
       (!next.area &&
-        (previous.area ||
+        (previous.selected ||
+          previous.area ||
           previous.intent !== next.intent ||
           previous.layout !== next.layout)))
   );
