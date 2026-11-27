@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import {
+  EV_CATALOGUE,
   SELECTABLE_PACKS,
   selectPack,
   findPack,
@@ -21,6 +22,40 @@ import {
   XEV_59,
 } from "./range-fixtures";
 afterEach(() => vi.restoreAllMocks());
+it("keeps the documented provenance totals in sync with the catalogue", () => {
+  const fields = EV_CATALOGUE.flatMap((pack) => Object.values(pack.provenance));
+  expect(fields.filter((field) => field.kind === "published")).toHaveLength(85);
+  expect(fields.filter((field) => field.kind === "measured")).toHaveLength(6);
+  expect(fields.filter((field) => field.kind === "estimate")).toHaveLength(125);
+  expect(
+    new Set(fields.map((field) => field.source).filter(Boolean)).size,
+  ).toBe(21);
+});
+it("uses pack-specific loops with highway consumption below city, without changing the 59 kWh packs", () => {
+  for (const [id, city, highway] of [
+    ["mahindra-xev-9e-79", 5.38, 6.18],
+    ["mahindra-be-6-79", 5.55, 5.81],
+  ] as const) {
+    const pack = packById(id);
+    expect(pack.cityWhPerKm).toBeCloseTo(1000 / city);
+    expect(pack.highwayWhPerKm).toBeCloseTo(1000 / highway);
+    expect(pack.highwayWhPerKm).toBeLessThan(pack.cityWhPerKm);
+    expect(effectiveConsumption(pack, 60)).toBeCloseTo(
+      ((pack.cityWhPerKm + pack.highwayWhPerKm) / 2) * 1.1,
+    );
+    expect(estimateRange(pack, 50, 80).rangeKm).toBeGreaterThan(
+      estimateRange(pack, 50, 40).rangeKm,
+    );
+    expect(pack.provenance.cityWhPerKm.kind).toBe("measured");
+    expect(pack.provenance.highwayWhPerKm.kind).toBe("measured");
+  }
+  expect(packById("mahindra-xev-9e-59").provenance.cityWhPerKm.kind).toBe(
+    "estimate",
+  );
+  expect(packById("mahindra-be-6-59").provenance.highwayWhPerKm.kind).toBe(
+    "estimate",
+  );
+});
 it("P2': 59 kWh at 10% and 80 km/h matches ~30 km, with speed interpolation and cap", () => {
   const pack = packById(XEV_59);
   expect(estimateRange(pack, 10, 40).energyKwh).toBeCloseTo(5.9);

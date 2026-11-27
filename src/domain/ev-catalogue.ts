@@ -113,15 +113,26 @@ const ROWS: readonly PackRow[] = [
     EV_MODELS[6],
     79,
     656,
-    155,
-    185,
+    1000 / 5.38,
+    1000 / 6.18,
     175,
     11,
     "xev",
     "MIDC",
   ],
   ["mahindra-be-6-59", EV_MODELS[7], 59, 557, 145, 175, 140, 11, "be", "MIDC"],
-  ["mahindra-be-6-79", EV_MODELS[7], 79, 683, 150, 180, 175, 11, "be", "MIDC"],
+  [
+    "mahindra-be-6-79",
+    EV_MODELS[7],
+    79,
+    683,
+    1000 / 5.55,
+    1000 / 5.81,
+    175,
+    11,
+    "be",
+    "MIDC",
+  ],
   [
     "mahindra-xuv400-34.5",
     EV_MODELS[8],
@@ -377,6 +388,17 @@ const ROWS: readonly PackRow[] = [
     "MIDC",
   ],
 ];
+const MEASURED_SOURCES = new Map([
+  ["tata-nexon-ev-45", SOURCES.measured],
+  [
+    "mahindra-xev-9e-79",
+    "https://www.autocarindia.com/auto-features/mahindra-xev-9e-real-world-range-tested-explained-436045",
+  ],
+  [
+    "mahindra-be-6-79",
+    "https://www.autocarindia.com/car-reviews/mahindra-be-6-road-test-review-437526",
+  ],
+]);
 function makePack(row: PackRow): EvPack {
   const [
     id,
@@ -392,26 +414,7 @@ function makePack(row: PackRow): EvPack {
   ] = row;
   const reference = new Map(Object.entries(SOURCES)).get(source);
   if (!reference) throw new Error("Missing catalogue source");
-  const provenance = {
-    nominalKwh: published(reference),
-    usableKwh: ESTIMATE,
-    claimedRangeKm: published(reference),
-    testCycle: published(reference),
-    maxDcKw: ESTIMATE,
-    maxAcKw: ESTIMATE,
-    cityWhPerKm: ESTIMATE,
-    highwayWhPerKm: ESTIMATE,
-  };
-  if (model === "BYD Seal") {
-    provenance.claimedRangeKm = published(SOURCES.sealRange);
-    provenance.testCycle = published(SOURCES.sealRange);
-  }
-  if (id === "tata-nexon-ev-45") {
-    provenance.cityWhPerKm = { source: SOURCES.measured, kind: "measured" };
-    provenance.highwayWhPerKm = { source: SOURCES.measured, kind: "measured" };
-  }
-  if (model === "Tata Nexon EV") provenance.maxAcKw = published(SOURCES.nexon);
-  if (model === "Tata Curvv EV") provenance.maxAcKw = published(SOURCES.curvv);
+
   return {
     id,
     model,
@@ -424,7 +427,7 @@ function makePack(row: PackRow): EvPack {
     maxAcKw,
     cityWhPerKm,
     highwayWhPerKm,
-    provenance,
+    provenance: provenanceFor(id, model, reference),
   };
 }
 export const EV_CATALOGUE: readonly EvPack[] = ROWS.map(makePack);
@@ -458,4 +461,33 @@ export function selectPack(profile: {
       : undefined;
   }
   return profile.evModel ? legacyPack(profile.evModel) : undefined;
+}
+
+function provenanceFor(
+  id: string,
+  model: EvModel,
+  reference: string,
+): EvPack["provenance"] {
+  const provenance = {
+    nominalKwh: published(reference),
+    usableKwh: ESTIMATE,
+    claimedRangeKm: published(reference),
+    testCycle: published(reference),
+    maxDcKw: ESTIMATE,
+    maxAcKw: ESTIMATE,
+    cityWhPerKm: ESTIMATE,
+    highwayWhPerKm: ESTIMATE,
+  };
+  if (model === "BYD Seal") {
+    provenance.claimedRangeKm = published(SOURCES.sealRange);
+    provenance.testCycle = published(SOURCES.sealRange);
+  }
+  const measured = MEASURED_SOURCES.get(id);
+  if (measured) {
+    provenance.cityWhPerKm = { source: measured, kind: "measured" };
+    provenance.highwayWhPerKm = { source: measured, kind: "measured" };
+  }
+  if (model === "Tata Nexon EV") provenance.maxAcKw = published(SOURCES.nexon);
+  if (model === "Tata Curvv EV") provenance.maxAcKw = published(SOURCES.curvv);
+  return provenance;
 }

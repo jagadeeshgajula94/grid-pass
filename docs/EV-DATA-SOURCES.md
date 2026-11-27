@@ -1,6 +1,8 @@
 # EV data sources
 
-All links below were opened during source verification. Fields marked estimate are not verified specifications. Nominal energy (not an invented usable-energy figure) drives S1. Unpublished usable energy remains null. Peak charger input in a brochure is not proof of a vehicle's peak acceptance, so DC limits remain the design's estimates unless explicitly verified. City/highway figures are the approved illustrative assumptions except the Nexon 45 measurement (1000 divided by Autocar's 7.9/7.67 km/kWh). Measurements are not guarantees; the algorithm adds its 10% consumption margin.
+All links below were opened during source verification. Fields marked estimate are not verified specifications. Nominal energy (not an invented usable-energy figure) drives S1. Unpublished usable energy remains null. Peak charger input in a brochure is not proof of a vehicle's peak acceptance, so DC limits remain the design's estimates unless explicitly verified. City/highway figures are the approved illustrative assumptions except pack-specific Autocar measurements (Nexon 45, XEV 9e 79 and BE 6 79). Measurements are not guarantees; the algorithm adds its 10% consumption margin.
+
+**Provenance totals:** 85 published, 6 measured and 125 estimate fields (216 fields across 27 packs), citing 21 distinct URLs.
 
 ## Data calls
 
@@ -11,6 +13,7 @@ All links below were opened during source verification. Fields marked estimate a
 - Punch 25/35 are verified historical packs, not the newer 30/40 packs. Tiago uses updated P1+P2 range. Historical Ioniq 72.6 remains supported despite the live brochure now describing 84.
 - Seal's manufacturer labels 510/650 NEDC; Autocar explicitly labels the same figures ARAI. Catalogue range/cycle cite Autocar, capacity cites BYD; this conflicting certification reporting does not enter the energy calculation.
 - Unpublished limits use the design's values, including Comet DC 0. The Citroën manufacturer brochure is hosted by its Nepal distributor and cross-checked against the opened Indian Electree page (https://evelectree.com/cardetails/ec3/brochure).
+- XEV 9e Pack Three 79 kWh: Autocar July 2025 measured 5.38 km/kWh city and 6.18 highway (1000/5.38 ≈186 and 1000/6.18 ≈162 Wh/km). BE 6 Pack Three 79 kWh: Autocar’s pack-specific road test measured 5.55 city and 5.81 highway (≈180/172 Wh/km). These are test loops, **not constant 80 km/h runs**; hotter stop-go city conditions can consume more than the highway loop. Interpolation permits highway < city. Neither measurement is applied to either 59 kWh pack, whose consumption remains estimated.
 - Worked-case arithmetic tests use the design's illustrative consumption independently from measured catalogue data.
 
 ## Mahindra XEV 9e — 59 kWh (`mahindra-xev-9e-59`)
@@ -36,8 +39,8 @@ All links below were opened during source verification. Fields marked estimate a
 | testCycle      | MIDC               | published | [source](https://www.mahindraelectricsuv.com/on/demandware.static/-/Library-Sites-eSUVSharedLibrary/default/MXV9/XEV9e_BROCHURE_R1_20260428.pdf) |
 | maxDcKw        | 175                | estimate  | —                                                                                                                                                |
 | maxAcKw        | 11                 | estimate  | —                                                                                                                                                |
-| cityWhPerKm    | 155                | estimate  | —                                                                                                                                                |
-| highwayWhPerKm | 185                | estimate  | —                                                                                                                                                |
+| cityWhPerKm    | 185.87360594795538 | measured  | [source](https://www.autocarindia.com/auto-features/mahindra-xev-9e-real-world-range-tested-explained-436045)                                    |
+| highwayWhPerKm | 161.81229773462783 | measured  | [source](https://www.autocarindia.com/auto-features/mahindra-xev-9e-real-world-range-tested-explained-436045)                                    |
 
 ## Mahindra BE 6 — 59 kWh (`mahindra-be-6-59`)
 
@@ -62,8 +65,8 @@ All links below were opened during source verification. Fields marked estimate a
 | testCycle      | MIDC               | published | [source](https://www.mahindraelectricsuv.com/on/demandware.static/-/Library-Sites-eSUVSharedLibrary/default/dw2ea5ae4c/Be-6e/BE-6-Brochure.pdf) |
 | maxDcKw        | 175                | estimate  | —                                                                                                                                               |
 | maxAcKw        | 11                 | estimate  | —                                                                                                                                               |
-| cityWhPerKm    | 150                | estimate  | —                                                                                                                                               |
-| highwayWhPerKm | 180                | estimate  | —                                                                                                                                               |
+| cityWhPerKm    | 180.18018018018017 | measured  | [source](https://www.autocarindia.com/car-reviews/mahindra-be-6-road-test-review-437526)                                                        |
+| highwayWhPerKm | 172.1170395869191  | measured  | [source](https://www.autocarindia.com/car-reviews/mahindra-be-6-road-test-review-437526)                                                        |
 
 ## Mahindra XUV400 — 34.5 kWh (`mahindra-xuv400-34.5`)
 
