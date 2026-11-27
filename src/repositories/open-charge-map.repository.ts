@@ -39,7 +39,8 @@ function connectorsOf(poi: OcmPoi): ConnectorDto[] {
           powerKw: connection.PowerKW ?? 0,
           tariffInrPerKwh: null,
           status:
-            connection.StatusType?.IsOperational === false
+            (connection.StatusType?.IsOperational ??
+              poi.StatusType?.IsOperational) === false
               ? ("offline" as const)
               : ("unknown" as const),
         }))

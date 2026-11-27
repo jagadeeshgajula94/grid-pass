@@ -1,5 +1,7 @@
 import { expect, it, vi } from "vitest";
 import { HttpOpenChargeMapRepository } from "../src/repositories/open-charge-map.repository";
+import { rankRecommendations } from "../src/services/recommendation.service";
+import { rangeQuery } from "./range-fixtures";
 const center = { lat: 17.385, lng: 78.4867 };
 const poi = {
   ID: 1,
@@ -14,6 +16,44 @@ const poi = {
     { ConnectionTypeID: 999 },
   ],
 };
+it.each([
+  { site: false, port: undefined, expected: "offline" },
+  { site: false, port: null, expected: "offline" },
+  { site: false, port: {}, expected: "offline" },
+  { site: false, port: { IsOperational: null }, expected: "offline" },
+  { site: false, port: { IsOperational: true }, expected: "unknown" },
+  { site: true, port: { IsOperational: false }, expected: "offline" },
+  { site: true, port: undefined, expected: "unknown" },
+  { site: undefined, port: undefined, expected: "unknown" },
+])(
+  "uses site-level operational status only when a port has no operational status: $site / $port",
+  async ({ site, port, expected }) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json([
+        {
+          ...poi,
+          StatusType: { IsOperational: site },
+          Connections: [
+            { ConnectionTypeID: 33, PowerKW: 60, StatusType: port },
+          ],
+        },
+      ]),
+    );
+    const result = await new HttpOpenChargeMapRepository(
+      "key",
+      fetcher,
+    ).findNearby(center, 5);
+    if (!result.ok) throw result.error;
+    const station = result.value[0];
+    if (!station) throw new Error("Missing OCM station");
+    expect(station.connectors[0]?.status).toBe(expected);
+    const ranked = rankRecommendations(
+      [{ station, roadDistanceKm: 1, detourKm: 0, progressKm: 0 }],
+      rangeQuery(),
+    );
+    expect(ranked.recommendations).toHaveLength(expected === "offline" ? 0 : 1);
+  },
+);
 it("uses only the fixed host and sanitizes untrusted text without interpreting markup", async () => {
   const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json([poi]));
   const result = await new HttpOpenChargeMapRepository(
