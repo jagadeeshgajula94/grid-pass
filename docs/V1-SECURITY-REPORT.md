@@ -162,6 +162,11 @@ mobile, accessibility tooling and sustained-load testing were not performed here
   session model precedence, validation, Origin 403, rate-limit 429, cancellation,
   client response validation, guided input/results/Back and map highlighting.
 
+## Pack confirmation UI (step 2)
+
+- POST /api/auth/me uses authenticatedApi and strict supported-variant validation. Exact-Origin CSRF and the 60/IP/minute general limiter apply. The service resolves identity from the active session, verifies the pack belongs to the account model, and updates only that user via the repository; no user ID or confirmation flag is accepted from the client. DTOs are allowlisted and no-store. Legacy accounts remain conservative until confirmed.
+- Guest and registration selectors expose supported model/pack combinations; model changes clear pack selection. The assistant summary uses energy-range output, marks assumed positions, labels demo/unknown occupancy, and visibly warns for B. No new motion is introduced. Source notes are escaped text and a fixed HTTPS documentation link.
+
 ## Planned V2 security checklist (not implemented)
 
 - **Centralized UPI wallet:** legal/RBI/PPI and licensed-partner assessment before

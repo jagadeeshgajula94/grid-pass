@@ -4,7 +4,7 @@ import { AppError } from "../../lib/errors";
 
 const responseSchema = z.object({ error: z.string().optional() });
 export async function submitAuth(
-  mode: "login" | "register",
+  mode: "login" | "register" | "me",
   data: unknown,
 ): Promise<Result<null, AppError>> {
   try {

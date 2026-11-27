@@ -77,9 +77,7 @@ it("collects a guest model, syncs slider/number, explains results, shows a stati
   );
   expect(screen.getByRole("button", { name: "Back" })).toHaveFocus();
   expect(screen.getByRole("button", { name: FIND_STOPS })).toBeDisabled();
-  fireEvent.change(screen.getByLabelText("Your EV model"), {
-    target: { value: NEXON },
-  });
+  chooseNexon();
   fireEvent.change(screen.getByLabelText("Battery level"), {
     target: { value: "60" },
   });
@@ -97,6 +95,7 @@ it("collects a guest model, syncs slider/number, explains results, shows a stati
       body: JSON.stringify({
         batteryPercent: 35,
         evModel: NEXON,
+        variantId: "tata-nexon-ev-45",
         context: nearbyContext,
         carPosition: nearbyContext.center,
         positionSource: "assumed",
@@ -326,3 +325,12 @@ it.each([
     expect(screen.queryByRole("button", { name: UPDATE_STOPS })).toBeNull();
   },
 );
+
+function chooseNexon(): void {
+  fireEvent.change(screen.getByLabelText("Your EV model"), {
+    target: { value: NEXON },
+  });
+  fireEvent.change(screen.getByLabelText("Battery pack"), {
+    target: { value: "tata-nexon-ev-45" },
+  });
+}

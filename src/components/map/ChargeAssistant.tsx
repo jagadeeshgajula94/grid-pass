@@ -1,6 +1,9 @@
-import { useEffect, useRef, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { ArrowLeft, Zap } from "lucide-react";
-import { EV_MODELS } from "../../domain/ev-catalogue";
+import { EV_MODELS, findPack, legacyPack } from "../../domain/ev-catalogue";
+import { VehiclePicker, packLabel } from "../VehiclePicker";
+import { AccountPack } from "./AccountPack";
+import { estimateRange } from "../../services/range.service";
 import type {
   ChargingRecommendation,
   RecommendationContext,
@@ -64,33 +67,29 @@ function ModelInput({
   assistant: Assistant;
   accountModel: string;
 }): ReactElement {
+  const pack = findPack(assistant.variantId);
   if (accountModel)
     return (
       <p className="assistant-model">
         {accountModel}
         <small>From your account</small>
+        {pack && <small>{packLabel(pack)}</small>}
       </p>
     );
   return (
-    <label className="assistant-model-picker">
-      Your EV model
-      <select
-        value={assistant.model}
-        required
-        onChange={(event) =>
-          assistant.setModel(
-            EV_MODELS.find((value) => value === event.target.value) ?? "",
-          )
-        }
-      >
-        <option value="">Choose your EV</option>
-        {EV_MODELS.map((model) => (
-          <option key={model}>{model}</option>
-        ))}
-      </select>
-    </label>
+    <VehiclePicker
+      model={assistant.model}
+      variantId={assistant.variantId}
+      onChange={(value) => {
+        assistant.setModel(
+          EV_MODELS.find((model) => model === value.model) ?? "",
+        );
+        assistant.setVariantId(value.variantId);
+      }}
+    />
   );
 }
+
 function ResultCard({
   result,
   onShow,
@@ -99,11 +98,24 @@ function ResultCard({
   onShow: (station: StationDto) => void;
 }): ReactElement {
   return (
-    <li className="assistant-result">
+    <li
+      className={`assistant-result ${result.tier === "B" ? "assistant-result-low" : ""}`}
+    >
+      <div className="assistant-status-row">
+        <span className="assistant-tier">
+          {result.tier === "B" ? "Tier B · Low battery" : "Tier A"}
+        </span>
+        <span>{availabilityLabel(result.wait.availability)}</span>
+      </div>
       <h3>{result.station.name}</h3>
+      {result.station.statusSource === "demo" && (
+        <small className="occupancy-note">demo status, not live</small>
+      )}
       <p>{result.reason}</p>
       <div>
-        <span className="muted">~{result.roadDistanceKm} km drive</span>
+        <span className="muted">
+          ~{result.roadDistanceKm.toFixed(1)} km drive
+        </span>
         <button
           className="map-action"
           onClick={() => onShow(result.station)}
@@ -125,13 +137,19 @@ function AssistantResults({
   return (
     <section
       className="assistant-results"
+      data-tier={data.tier}
       aria-label="Charging recommendations"
       aria-live="polite"
     >
       <h3>
         {data.recommendations.length ? "Your best stops" : "Nothing reachable"}
       </h3>
-      <p>{data.message}</p>
+      <p
+        className="assistant-guidance"
+        role={data.tier === "B" ? "alert" : undefined}
+      >
+        {data.message}
+      </p>
       {data.routeMessage && <p>{data.routeMessage}</p>}
       <p className="muted">
         ~{Math.floor(data.usableRangeKm)} km estimated · ~
@@ -153,6 +171,15 @@ function AssistantResults({
     </section>
   );
 }
+interface AssistantProps {
+  context: RecommendationContext;
+  evModel: string;
+  onBack: () => void;
+  onShow: (station: StationDto) => void;
+  onReset?: () => void;
+  position?: Pick<RecommendationRequest, "carPosition" | "positionSource">;
+  accountPack?: { variantId?: string; packConfirmed?: boolean };
+}
 export function ChargeAssistant({
   context,
   evModel,
@@ -160,43 +187,59 @@ export function ChargeAssistant({
   onShow,
   onReset,
   position,
-}: {
-  context: RecommendationContext;
-  evModel: string;
-  onBack: () => void;
-  onShow: (station: StationDto) => void;
-  onReset?: () => void;
-  position?: Pick<RecommendationRequest, "carPosition" | "positionSource">;
-}): ReactElement {
-  const assistant = useChargeAssistant(context, evModel, onReset, position);
+  accountPack,
+}: AssistantProps): ReactElement {
+  const assistant = useChargeAssistant(
+    context,
+    evModel,
+    onReset,
+    position,
+    accountPack?.variantId,
+  );
+  const [confirmed, setConfirmed] = useState(
+    accountPack?.packConfirmed !== false,
+  );
   const resultContext = assistant.resultContext ?? context;
   return (
     <section className="charge-assistant" aria-labelledby="assistant-title">
       <AssistantHeader context={resultContext} onBack={onBack} />
-      <details className="assistant-inputs" open={!assistant.data}>
-        <summary>
-          {assistant.battery}% · {assistant.model || "Choose your EV"} · Adjust
-        </summary>
-        <AssistantForm assistant={assistant} evModel={evModel} />
-      </details>
-      <AssistantContextUpdate assistant={assistant} />
-      {assistant.loading && (
-        <p role="status">Checking compatible, available chargers…</p>
+      {!confirmed && (
+        <AccountPack
+          model={evModel}
+          onConfirmed={(id) => {
+            assistant.setVariantId(id);
+            setConfirmed(true);
+          }}
+        />
       )}
+      <AssistantInputs assistant={assistant} evModel={evModel} />
+      <AssistantContextUpdate assistant={assistant} />
+      {assistant.loading && <p role="status">Checking compatible chargers…</p>}
       {assistant.error && <p role="alert">{assistant.error}</p>}
       {assistant.data && (
         <AssistantResults data={assistant.data} onShow={onShow} />
       )}
-      <p className="assistant-disclaimer muted">
-        {assistant.data?.positionSource === "assumed" &&
-          "Assumed car position; distances start at the submitted map centre. "}
-        Approximate EV figures, not a range guarantee. Safety margins are
-        estimates, not a guaranteed arrival reserve. Local demo status is not
-        live; confirm before driving. Charging is not yet supported.
-      </p>
+      <AssistantDisclaimer data={assistant.data} />
     </section>
   );
 }
+function AssistantInputs({
+  assistant,
+  evModel,
+}: {
+  assistant: Assistant;
+  evModel: string;
+}): ReactElement {
+  return (
+    <details className="assistant-inputs" open={!assistant.data}>
+      <summary>
+        <RangeLine assistant={assistant} accountModel={evModel} /> · Adjust
+      </summary>
+      <AssistantForm assistant={assistant} evModel={evModel} />
+    </details>
+  );
+}
+
 function AssistantContextUpdate({
   assistant,
 }: {
@@ -266,10 +309,73 @@ function AssistantForm({
       <button
         className="assistant-submit"
         type="submit"
-        disabled={!assistant.model || assistant.loading}
+        disabled={
+          !assistant.model ||
+          (!evModel && !assistant.variantId) ||
+          assistant.loading
+        }
       >
         {assistant.loading ? "Finding your best stops…" : "Find charging stops"}
       </button>
     </form>
   );
+}
+
+function RangeLine({
+  assistant,
+  accountModel,
+}: {
+  assistant: Assistant;
+  accountModel: string;
+}): ReactElement {
+  const pack =
+    findPack(assistant.data?.variantId ?? assistant.variantId) ??
+    legacyPack(accountModel)?.pack;
+  if (!pack) return <>Choose your EV and battery pack</>;
+  const range =
+    assistant.data?.usableRangeKm ??
+    estimateRange(pack, assistant.battery).rangeKm;
+  return (
+    <>
+      {assistant.data?.batteryPercent ?? assistant.battery}% ·{" "}
+      {pack.model.replace("Mahindra ", "")} {pack.nominalKwh} kWh · ~
+      {Math.floor(range)} km left
+    </>
+  );
+}
+function AssistantDisclaimer({
+  data,
+}: {
+  data: RecommendationDto | null;
+}): ReactElement {
+  return (
+    <div className="assistant-disclaimer muted">
+      {data?.positionSource === "assumed" && (
+        <p>distances from map centre (location unavailable)</p>
+      )}
+      <details className="assistant-sources">
+        <summary>Figures approximate</summary>
+        <p>
+          Nominal pack energy and measured test loops or consumption
+          assumptions, with a 10% margin. Not a range guarantee. See{" "}
+          <a
+            href="https://github.com/jagadeeshgajula94/grid-pass/blob/feat/ev-variants-range/docs/EV-DATA-SOURCES.md"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            EV data sources
+          </a>{" "}
+          for each pack. Test loops are not constant-speed 80 km/h runs.
+        </p>
+      </details>
+      <p>Confirm status before driving. Charging is not yet supported.</p>
+    </div>
+  );
+}
+
+function availabilityLabel(
+  availability: ChargingRecommendation["wait"]["availability"],
+): string {
+  if (availability === "unknown") return "Availability unknown";
+  return availability === "busy" ? "Busy" : "Free";
 }

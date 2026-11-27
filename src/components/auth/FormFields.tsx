@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { EV_MODELS } from "../../validation/auth.schema";
+import { RegistrationVehicle } from "../VehiclePicker";
 import { PasswordStrength } from "./PasswordStrength";
 
 export type FieldErrors = Record<string, string[] | undefined>;
@@ -75,38 +75,11 @@ function RegisterFields({
         error={errors.phone}
         onBlur={onBlur}
       />
-      <VehicleField error={errors.evModel} onBlur={onBlur} />
-    </>
-  );
-}
-function VehicleField({
-  error,
-  onBlur,
-}: {
-  error?: string[];
-  onBlur: () => void;
-}): ReactElement {
-  return (
-    <div className="field">
-      <label htmlFor="evModel">Your electric vehicle</label>
-      <select
-        id="evModel"
-        name="evModel"
+      <RegistrationVehicle
+        invalid={!!errors.evModel || !!errors.variantId}
         onBlur={onBlur}
-        aria-invalid={!!error}
-        aria-describedby={error ? "evModel-error" : undefined}
-      >
-        <option value="">Select your EV</option>
-        {EV_MODELS.map((model) => (
-          <option key={model}>{model}</option>
-        ))}
-      </select>
-      {error && (
-        <span className="field-error" id="evModel-error">
-          Choose your EV model
-        </span>
-      )}
-    </div>
+      />
+    </>
   );
 }
 export function FormFields({

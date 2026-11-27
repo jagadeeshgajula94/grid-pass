@@ -31,7 +31,10 @@ export function useChargeAssistant(
   accountModel: string,
   onReset?: () => void,
   position?: Pick<RecommendationRequest, "carPosition" | "positionSource">,
+  initialVariant = "",
 ): AssistantState & {
+  variantId: string;
+  setVariantId: (value: string) => void;
   battery: number;
   setBattery: (value: number) => void;
   model: EvModel | "";
@@ -39,12 +42,21 @@ export function useChargeAssistant(
   submit: () => void;
   contextChanged: boolean;
 } {
+  const [variantId, setVariantId] = useState(initialVariant);
   const [battery, setBattery] = useState(35);
   const [model, setModel] = useState<EvModel | "">(
     EV_MODELS.find((value) => value === accountModel) ?? "",
   );
   return {
-    ...useAssistantRequest(context, battery, model, onReset, position),
+    ...useAssistantRequest(
+      context,
+      battery,
+      { model, variantId },
+      onReset,
+      position,
+    ),
+    variantId,
+    setVariantId,
     battery,
     setBattery,
     model,
@@ -54,7 +66,7 @@ export function useChargeAssistant(
 function useAssistantRequest(
   context: RecommendationContext,
   battery: number,
-  model: EvModel | "",
+  vehicle: { model: EvModel | ""; variantId: string },
   onReset?: () => void,
   position?: Pick<RecommendationRequest, "carPosition" | "positionSource">,
 ): AssistantState & { submit: () => void; contextChanged: boolean } {
@@ -70,7 +82,7 @@ function useAssistantRequest(
     reset.current?.();
     setState(INITIAL_STATE);
     return (): void => controller.current?.abort();
-  }, [battery, model]);
+  }, [battery, vehicle.model, vehicle.variantId]);
   const submit = (): void => {
     controller.current?.abort();
     onReset?.();
@@ -84,12 +96,7 @@ function useAssistantRequest(
       resultKey: contextKey,
     });
     void loadAssistant(
-      {
-        batteryPercent: battery,
-        evModel: model || undefined,
-        context,
-        ...requestPosition(context, position),
-      },
+      assistantQuery(context, battery, vehicle, position),
       request,
       contextKey,
       setState,
@@ -126,4 +133,19 @@ async function loadAssistant(
       resultContext: query.context,
       resultKey,
     });
+}
+
+function assistantQuery(
+  context: RecommendationContext,
+  battery: number,
+  vehicle: { model: EvModel | ""; variantId: string },
+  position?: Pick<RecommendationRequest, "carPosition" | "positionSource">,
+): RecommendationRequest {
+  return {
+    batteryPercent: battery,
+    evModel: vehicle.model || undefined,
+    ...(vehicle.variantId ? { variantId: vehicle.variantId } : {}),
+    context,
+    ...requestPosition(context, position),
+  };
 }

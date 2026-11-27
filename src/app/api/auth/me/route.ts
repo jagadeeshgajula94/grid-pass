@@ -1,5 +1,6 @@
 import type { NextResponse } from "next/server";
 import { handleAuth } from "../../../../lib/auth-http";
+export { confirmAccountPack as POST } from "../../../../lib/account-pack-http";
 
 export const runtime = "nodejs";
 export function GET(request: Request): Promise<NextResponse> {
