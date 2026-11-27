@@ -262,6 +262,7 @@ function discoverySummary(state: WorkspaceState): string {
 function PlannerContent({
   state,
   evModel,
+  accountPack,
   sheet,
   searchRequest,
   onSearchReady,
@@ -271,6 +272,7 @@ function PlannerContent({
       <RoutePlanner
         {...state.planner}
         evModel={evModel}
+        accountPack={accountPack}
         route={state.route}
         searchRequest={searchRequest}
         onSearchReady={onSearchReady}

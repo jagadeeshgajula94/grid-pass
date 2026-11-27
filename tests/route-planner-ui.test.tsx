@@ -354,6 +354,25 @@ it("explains estimated EV range", () => {
   expect(rangeContext("unknown")).toContain("Range varies");
   expect(rangeContext("", 100, true)).toBe(GUEST_RANGE);
 });
+it("uses a confirmed pack for the planner range, while an unconfirmed account stays conservative", async () => {
+  mockPlanner();
+  const accountPack = { variantId: "tata-nexon-ev-45", packConfirmed: false };
+  const { rerender } = render(
+    <MapWorkspace evModel="Tata Nexon EV" accountPack={accountPack} />,
+  );
+  expect(screen.getByText(/~248 km estimated range/)).toBeInTheDocument();
+  rerender(
+    <MapWorkspace
+      evModel="Tata Nexon EV"
+      accountPack={{ ...accountPack, packConfirmed: true }}
+    />,
+  );
+  expect(screen.getByText(/~440 km estimated range/)).toBeInTheDocument();
+  await planTrip();
+  expect(
+    screen.getByText(/within your Tata Nexon EV range \(~440 km\)/),
+  ).toBeInTheDocument();
+});
 it("never promises EV range when only fallback geometry is available", async () => {
   mockPlanner(true);
   render(<MapWorkspace firstName="Aarav" evModel="Tata Nexon EV" />);
