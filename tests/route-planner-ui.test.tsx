@@ -28,6 +28,7 @@ const EXPLICIT_SEARCH_MODE = "mode=search";
 const ARIA_ACTIVE_DESCENDANT = "aria-activedescendant";
 const ARIA_EXPANDED = "aria-expanded";
 const WITHIN_RANGE = "within your";
+const NEXON_MODEL = "Tata Nexon EV";
 const PLAN_CHARGE_STOP = "plan a charge stop";
 const GUEST_RANGE = "Sign in to see range for your EV";
 const FIT_REQUEST = "data-fit-request";
@@ -353,7 +354,7 @@ it("lets guests browse stations, open the drawer and plan a route with neutral E
   expect(screen.queryByLabelText(NEARBY_RING)).toBeNull();
 });
 it("explains estimated EV range", () => {
-  expect(rangeContext("Tata Nexon EV", 150)).toContain(WITHIN_RANGE);
+  expect(rangeContext(NEXON_MODEL, 150)).toContain(WITHIN_RANGE);
   expect(rangeContext("Kia EV6", 750)).toContain(PLAN_CHARGE_STOP);
   expect(rangeContext("unknown")).toContain("Range varies");
   expect(rangeContext("", 100, true)).toBe(GUEST_RANGE);
@@ -364,7 +365,7 @@ it.each([300, 600, 200, undefined, 0])(
     const speed = duration ? (400 / duration) * 60 : 80;
     const range = estimateRange(packById(), 100, speed).reachableRangeKm;
     const text = rangeContext(
-      "Tata Nexon EV",
+      NEXON_MODEL,
       400,
       false,
       { variantId: NEXON_45, packConfirmed: true },
@@ -412,7 +413,7 @@ it("never promises EV range when only fallback geometry is available", async () 
   expect(rangeContext("unknown", 100, true)).toContain(
     "Road distance unavailable",
   );
-  expect(rangeContext("Tata Nexon EV", undefined, true)).not.toContain(
+  expect(rangeContext(NEXON_MODEL, undefined, true)).not.toContain(
     WITHIN_RANGE,
   );
 });
@@ -422,7 +423,7 @@ it("compares route distance with the unrounded conservative reach", () => {
   for (const offset of [-0.001, 0.001]) {
     const distance = range + offset;
     const text = rangeContext(
-      "Tata Nexon EV",
+      NEXON_MODEL,
       distance,
       false,
       { variantId: NEXON_45, packConfirmed: true },
