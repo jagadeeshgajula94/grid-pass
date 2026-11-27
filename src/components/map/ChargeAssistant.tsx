@@ -1,10 +1,11 @@
 import { useEffect, useRef, type ReactElement } from "react";
 import { ArrowLeft, Zap } from "lucide-react";
-import { EV_MODELS } from "../../domain/ev-models";
+import { EV_MODELS } from "../../domain/ev-catalogue";
 import type {
   ChargingRecommendation,
   RecommendationContext,
   RecommendationDto,
+  RecommendationRequest,
 } from "../../domain/recommendation";
 import type { StationDto } from "../../domain/station";
 import { useChargeAssistant } from "./use-charge-assistant";
@@ -133,8 +134,8 @@ function AssistantResults({
       <p>{data.message}</p>
       {data.routeMessage && <p>{data.routeMessage}</p>}
       <p className="muted">
-        ~{data.usableRangeKm} km estimated · ~{data.reachableRangeKm} km with
-        10% reserve
+        ~{Math.floor(data.usableRangeKm)} km estimated · ~
+        {Math.floor(data.reachableRangeKm)} km conservative reach
       </p>
       <ol>
         {data.recommendations.map((result) => (
@@ -158,14 +159,16 @@ export function ChargeAssistant({
   onBack,
   onShow,
   onReset,
+  position,
 }: {
   context: RecommendationContext;
   evModel: string;
   onBack: () => void;
   onShow: (station: StationDto) => void;
   onReset?: () => void;
+  position?: Pick<RecommendationRequest, "carPosition" | "positionSource">;
 }): ReactElement {
-  const assistant = useChargeAssistant(context, evModel, onReset);
+  const assistant = useChargeAssistant(context, evModel, onReset, position);
   const resultContext = assistant.resultContext ?? context;
   return (
     <section className="charge-assistant" aria-labelledby="assistant-title">
@@ -185,11 +188,11 @@ export function ChargeAssistant({
         <AssistantResults data={assistant.data} onShow={onShow} />
       )}
       <p className="assistant-disclaimer muted">
-        {resultContext.mode === "area" &&
-          "Distances and arrival estimates start at this map area's centre. "}
-        Approximate public EV figures, not a range guarantee. Includes a 10%
-        arrival reserve. Local demo availability; confirm before driving.
-        Charging is not yet supported.
+        {assistant.data?.positionSource === "assumed" &&
+          "Assumed car position; distances start at the submitted map centre. "}
+        Approximate EV figures, not a range guarantee. Safety margins are
+        estimates, not a guaranteed arrival reserve. Local demo status is not
+        live; confirm before driving. Charging is not yet supported.
       </p>
     </section>
   );

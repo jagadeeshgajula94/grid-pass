@@ -154,12 +154,9 @@ mobile, accessibility tooling and sustained-load testing were not performed here
   existing correlation/event/status metadata, not battery, coordinates, profile
   bodies or session tokens. The UI validates response DTOs and renders escaped
   React text; cancellations ignore stale responses.
-- Vehicle figures, road factors, availability, charge time and taper are estimates,
-  not a safety guarantee or reservation. The algorithm requires compatible available
-  ports and a 10% arrival reserve, and plainly reports nothing reachable. Area
-  estimates start from the selected area's centre. Demo availability is labeled.
-  This is public discovery only; no Start charging/payment UI or endpoint exists.
-  Future charging must require active-session and resource/payment authorization.
+- Revision 2 validates supported variant IDs, independent bounded car position and gps/route/assumed provenance. Session packs override the body; legacy labels use the smallest verified pack unconfirmed. Registration rejects pack/model mismatches and derives confirmation server-side.
+- Energy uses nominal kWh and consumption plus a 10% margin, not advertised range. A requires arrival ≥10%; B is explicitly low battery with distance ≤0.9R. Busy/unknown ports never hide reachability; only offline/incompatible/zero-power ports do. N6 offers no stop. Waits are estimated/unverified. OCM operational never means free, and demo DTOs identify demo status.
+- All safety statements are conditional on the input estimates, not real-world guarantees or charging authority. Search region never replaces a real car position. No charging/payment endpoint or new provider/dependency is added; see EV-DATA-SOURCES.md and seeded proof tests.
 - Regression coverage includes reserve boundaries, AC/DC compatibility and caps,
   nearby/area/route ranking, fallback roads, empty/unreachable states, public access,
   session model precedence, validation, Origin 403, rate-limit 429, cancellation,

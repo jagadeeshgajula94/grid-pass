@@ -86,8 +86,9 @@ it("requests expanded OCM data and maps operator and operational metadata", asyn
   });
   expect(result.ok && result.value[0]).toMatchObject({
     network: "tata-power",
+    statusSource: "unknown occupancy",
     connectors: [
-      { type: "CCS2", status: "available" },
+      { type: "CCS2", status: "unknown" },
       { type: "TYPE2", status: "offline" },
     ],
   });
@@ -153,7 +154,7 @@ it("expands quantities into independent ports and defaults omitted or null quant
     "TYPE2",
     "CHADEMO",
   ]);
-  expect(ports?.filter((port) => port.status === "available")).toHaveLength(3);
+  expect(ports?.filter((port) => port.status === "unknown")).toHaveLength(5);
   expect(ports?.[0]).not.toBe(ports?.[1]);
 });
 it.each([0, 21, 1.5])("rejects invalid port quantity %s", async (Quantity) => {

@@ -127,6 +127,7 @@ function station(
     ],
     amenities: index % 2 === 0 ? ["restroom", "cafe"] : ["dining", "wifi"],
     lastUpdated: "2026-01-01T00:00:00.000Z",
+    statusSource: "demo",
   };
 }
 function addHighwayStations(

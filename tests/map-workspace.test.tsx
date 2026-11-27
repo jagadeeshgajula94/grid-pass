@@ -74,6 +74,8 @@ it("chooses route before map area, otherwise area or the selected radar centre/r
   expect(
     recommendationSchema.safeParse({
       batteryPercent: 35,
+      carPosition: center,
+      positionSource: "gps",
       context: assistantContext(state),
     }).success,
   ).toBe(true);
@@ -90,7 +92,12 @@ it("normalizes long geocoded destination names before sending assistant context"
   });
   expect(context).toMatchObject({ destinationName: "V".repeat(160) });
   expect(
-    recommendationSchema.safeParse({ batteryPercent: 60, context }).success,
+    recommendationSchema.safeParse({
+      batteryPercent: 60,
+      context,
+      carPosition: center,
+      positionSource: "route",
+    }).success,
   ).toBe(true);
 });
 it("opens the assistant, sends radar context, highlights a result and returns focus on Back", async () => {

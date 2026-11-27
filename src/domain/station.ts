@@ -22,7 +22,7 @@ export interface ConnectorDto {
   type: (typeof CONNECTORS)[number];
   powerKw: number;
   tariffInrPerKwh: number | null;
-  status: "available" | "busy" | "offline";
+  status: "available" | "busy" | "unknown" | "offline";
 }
 export interface StationDto {
   id: string;
@@ -35,4 +35,5 @@ export interface StationDto {
   connectors: ConnectorDto[];
   amenities: ("restroom" | "cafe" | "dining" | "wifi")[];
   lastUpdated: string;
+  statusSource?: "demo" | "unknown occupancy";
 }

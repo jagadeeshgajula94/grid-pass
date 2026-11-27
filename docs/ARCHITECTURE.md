@@ -62,62 +62,21 @@ discovery and route corridor planning. Seed availability is demonstration data;
 public providers and route fallbacks are best-effort. Owners' names, email, phone,
 vehicle and password hashes are private data; signing keys and cookies are secrets.
 
-## Guided charging assistant (PR B)
+## Guided charging assistant (PR B; algorithm revision 2)
 
-`POST /api/recommendations/charging` is public discovery, not authorization to
-charge or pay. The route delegates to `recommendation-http`, which applies strict
-Zod validation (4 KiB JSON limit), resolves the active session through the auth
-service, and delegates ranking to `recommendation.service`. A signed-in account's
-EV model overrides the body's optional model; a guest must supply a supported
-`EV_MODELS` enum value or receive 400 asking for a model. Invalid/expired cookies
-are guests, not a source of trusted profile claims. Responses are `no-store`.
-Middleware keeps the exact-Origin POST check and general 60 requests/IP/minute
-limit, plus a separate 10 recommendations/IP/minute sliding window.
+`POST /api/recommendations/charging` is public discovery, not charging/payment authorization. Strict Zod validation bounds battery, variant IDs, car position and region context. The HttpOnly-cookie account pack overrides the body. Legacy labels resolve to their smallest verified pack with `packConfirmed:false` and a confirmation message (XUV 9e → XEV 9e 59; EV6 → 77.4). Explicit registration packs must match the model and persist with confirmation. Legacy guest model requests remain supported conservatively until the step-2 picker. Unsupported selections fail closed. Exact-Origin CSRF, no-store, 60 API/IP/minute and 10 recommendations/IP/minute remain unchanged.
 
-The UI automatically sends route context when a destination exists, otherwise
-the exposed map area, otherwise the radar centre and its selected radius (default
-5 km). Nearby accepts an optional 1–50 km radius, defaulting to 5, so the existing
-5/10/20 chips are honored. Area requires a 1–50 km radius; route accepts origin,
-destination and a 1–15 km buffer. Services reuse station/route services and their
-typed repositories, provider allowlists, bounds, timeouts and caches. There are
-no LLM calls, new providers, or client-side persistence of battery/location data.
+`domain/ev-catalogue.ts` replaces model-only specs with 16 models and 27 verified packs. Every data field has provenance; usable kWh stays null when unpublished. See [EV-DATA-SOURCES.md](EV-DATA-SOURCES.md). Claimed range is not an energy input. `range.service.ts` implements S1–S3/S5: nominal energy, city/highway interpolation at route average speed (40 km/h otherwise), capped high-speed penalty and 1.1 consumption margin.
 
-`domain/ev-models.ts` is the shared model/spec source. Approximate public
-Indian-market long-range figures (ARAI ranges; variants differ) are:
+Search region and car position are separate. Requests carry bounded `carPosition` and `positionSource` (gps/route/assumed). Transport supplies GPS outside route mode, route origin in route mode, or a labelled assumed map centre. Panning never substitutes a map centre for a real car. Non-route distance is car-to-station haversine ×1.3. Route distances start at the car projection and include approach plus detour; fallback roads use ×1.3. Route distance/duration determines consumption speed.
 
-| Model                                         | Battery kWh | Rated km | Max DC kW | Max AC kW |
-| --------------------------------------------- | ----------: | -------: | --------: | --------: |
-| Mahindra XUV 9e (legacy app label for XEV 9e) |          79 |      656 |       180 |        11 |
-| Tata Nexon EV                                 |        40.5 |      465 |        60 |       7.2 |
-| MG ZS EV                                      |        50.3 |      461 |        50 |       7.4 |
-| Hyundai Ioniq 5                               |        72.6 |      631 |       220 |        11 |
-| BYD Atto 3                                    |       60.48 |      521 |        80 |         7 |
-| Kia EV6                                       |        77.4 |      708 |       240 |        11 |
+S4/S6–S10 exclude offline/incompatible/zero-power ports, not busy/unknown ports. Demo DTOs carry `statusSource:"demo"`. OCM operational/unspecified occupancy is unknown, never free, with `statusSource:"unknown occupancy"`. A requires unrounded arrival ≥10%; if absent, B accepts distance ≤0.9R, warns and sorts nearest first. Below 10% battery an A label is impossible. N6 offers no stops. All guarantees are conditional on input estimates, not real-world guarantees.
 
-Usable range is rated range × battery fraction × 0.9. Reachability requires an
-unrounded arrival charge of at least 10%; the UI also shows range remaining with
-that reserve. CCS2/DC and TYPE2/AC are compatible; CHAdeMO is not supported by
-these cars. Only available, positive-power compatible ports count. Effective
-power is capped by the car. Minutes to 80% are battery kWh × max(0, 0.8 − arrival
-fraction) / effective kW × 1.1 × 60 (approximate taper; not a guarantee).
+Wait DTOs carry `estimated:true, unverified:true`: free 0, all-busy 30/compatible-count, unknown assumed 10 minutes for scoring but described as unknown. Offline ports never inflate counts/power. Power comes from the same occupancy class as the wait and is capped by the car. Charge time to 80% uses nominal kWh and 1.1 taper. A sorts drive/detour + wait + charge minus free-port/progress bonus; B sorts raw distance, then wait+charge. Ties prefer capped power, then station ID; top three only. Eligibility/score/distance stay unrounded, displayed arrival rounds down to tenths, charging minutes round nearest.
 
-Nearby/area road distance is haversine × 1.3. Their score is drive minutes at
-30 km/h + charge minutes − 2 minutes per free compatible port (capped at four).
-Route arrival distance is km along route + round-trip detour; if routing falls
-back, both are conservatively multiplied by 1.3. Route score is detour minutes at
-30 km/h + charge minutes − 0.2 minutes per km of route progress. Lowest scores
-win, ties prefer faster effective power, then stable station ID; only the top
-three are returned. Empty/unreachable results explicitly explain compatibility,
-availability or the nearest free charger versus reserve-limited range.
+Route messages distinguish P3 optional stops, P4 charging required, N6-route no reachable stop, and P3b a reachable destination without offered stops. P3b suppresses contradictory roadside advice. P4 uses absolute-10%-arrival range, distinct from B's 0.9R. Seeded tests cover proof points 1–6 across all packs, not top-three monotonicity.
 
-The guided sheet supports battery slider/number, guest model selection and an
-account-model chip. Show on map uses eased, padding-aware camera movement and a
-noninteractive halo without duplicating or overlapping station pins; Back
-restores browsing. Motion respects reduced-motion preferences. Area estimates
-start at the selected map area's centre, not a claimed GPS position. Approximate
-vehicle figures and local demo availability are labeled. Start charging remains
-unimplemented; future charge/payment endpoints must use `authenticatedApi` and
-service-level resource authorization.
+Existing camera intents, pinned submitted contexts, cancellation and Back remain. GPS changes also mark results stale without clearing them. Step 1 adds no pack-picker or confirmation UI; transport and old reserve/position copy are minimally corrected so B cannot inherit false guarantees. No dependencies, paid services, runtime data providers or client persistence are added. Charging remains unimplemented and must require active-session/resource/payment authorization.
 
 ## Layers and trust boundaries
 

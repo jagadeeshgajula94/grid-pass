@@ -459,6 +459,7 @@ function WorkspacePanel({
       {assistant.opened ? (
         <ChargeAssistant
           context={assistantContext(state)}
+          position={assistantPosition(state)}
           evModel={evModel}
           onBack={assistant.close}
           onShow={assistant.show}
@@ -536,4 +537,13 @@ export function MapWorkspace({
       />
     </main>
   );
+}
+
+function assistantPosition(
+  state: WorkspaceState,
+):
+  | { carPosition: { lat: number; lng: number }; positionSource: "gps" }
+  | undefined {
+  if (state.planner.destination || !state.search.position) return undefined;
+  return { carPosition: state.search.position, positionSource: "gps" };
 }

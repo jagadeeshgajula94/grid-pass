@@ -21,6 +21,9 @@ function northwestHubs(): typeof STATION_SEED {
 }
 it("seeds seven distinct northwest Hyderabad demo hubs with mixed networks and DC connectors", () => {
   const hubs = northwestHubs();
+  expect(STATION_SEED.every((station) => station.statusSource === "demo")).toBe(
+    true,
+  );
   expect(hubs).toHaveLength(7);
   expect(new Set(STATION_SEED.map((station) => station.id)).size).toBe(
     STATION_SEED.length,

@@ -4,141 +4,136 @@ import {
   rankRecommendations,
 } from "../src/services/recommendation.service";
 import * as routes from "../src/services/route.service";
-import {
-  corridorFixture,
-  destination,
-  plannerStation,
-} from "./planner-ui-fixtures";
-import { assistantCenter, NEXON } from "./recommendation-fixtures";
-import type { RecommendationRequest } from "../src/domain/recommendation";
-import type { EvModel } from "../src/domain/ev-models";
+import { corridorFixture, destination } from "./planner-ui-fixtures";
+import { assistantCenter } from "./recommendation-fixtures";
+import { candidate, mockDesignPack, rangeQuery } from "./range-fixtures";
 import { recommendationSchema } from "../src/validation/recommendation.schema";
-
-const query = {
-  evModel: NEXON,
-  batteryPercent: 60,
-  context: {
-    mode: "route",
-    origin: assistantCenter,
-    destination: { lat: destination.lat, lng: destination.lng },
-    destinationName: destination.name,
-    bufferKm: 5,
-  },
-} satisfies RecommendationRequest & { evModel: EvModel };
-const leaving = "Charge to 80% at one of these before leaving";
-function mockRoute(
-  distance = 275,
-  fallback = false,
-  stations = [{ ...plannerStation, kmAlongRoute: 2, detourKm: 0.5 }],
-): void {
+import { estimateRange } from "../src/services/range.service";
+const routeContext = {
+  mode: "route" as const,
+  origin: assistantCenter,
+  destination: { lat: destination.lat, lng: destination.lng },
+  destinationName: "Vijayawada",
+  bufferKm: 5,
+};
+function mockRoute(distance: number, empty = false, fallback = false): void {
   vi.spyOn(routes, "findCorridor").mockResolvedValue({
     ...corridorFixture,
-    route: { ...corridorFixture.route, totalDistanceKm: distance, fallback },
-    stations,
+    route: {
+      ...corridorFixture.route,
+      totalDistanceKm: distance,
+      estimatedDurationMin: distance,
+      coordinates: [assistantCenter, destination],
+      fallback,
+    },
+    stations: empty
+      ? []
+      : [{ ...candidate().station, kmAlongRoute: 2, detourKm: 0.5 }],
   });
 }
 afterEach(() => vi.restoreAllMocks());
-it("explains why a long trip needs an early charge, without promising 80% will finish the trip", async () => {
-  mockRoute();
-  const result = await recommendCharging(query);
-  expect(result.routeMessage).toContain(
-    "Vijayawada is ~275 km away and you have ~209 km with reserve",
+it("P3: 90% Nexon 45, 150 km at 60 km/h, arrives at 40.5% and stops are optional", async () => {
+  mockDesignPack();
+  mockRoute(150);
+  const result = await recommendCharging({
+    ...rangeQuery(90),
+    context: routeContext,
+  });
+  expect(result.routeMessage).toBe(
+    "Reach Vijayawada with ~40% left; optional stops below",
   );
-  expect(result.routeMessage).toContain(leaving);
-  expect(result.routeMessage).toContain("further stops may be needed");
+  expect(result.consumptionWhPerKm).toBeCloseTo(148.5);
 });
-it("labels reachable destinations and their unrounded arrival reserve as optional charging", async () => {
-  mockRoute(100);
-  expect((await recommendCharging(query)).routeMessage).toBe(
-    "You can reach Vijayawada with ~36% left (10% reserve); optional stops below.",
+it("P4: 60% Nexon 45 needs charging on a 321 km trip", async () => {
+  mockDesignPack();
+  mockRoute(321);
+  const result = await recommendCharging({
+    ...rangeQuery(60),
+    context: routeContext,
+  });
+  expect(result.routeMessage).toBe(
+    "Vijayawada is ~321 km, you have ~152 km with reserve: charge at one of these",
   );
 });
-it.each([0, 0.00001])(
-  "uses the exact 10%% destination reserve boundary (extra=%s km)",
-  async (extra) => {
-    mockRoute(465 * 0.9 * 0.5 + extra);
-    const result = await recommendCharging(query);
-    expect(result.routeMessage?.includes("optional stops below")).toBe(
-      extra === 0,
-    );
-  },
-);
-it("applies the same conservative road factor to fallback destination and charger distances", async () => {
-  mockRoute(200, true);
-  const result = await recommendCharging(query);
-  expect(result.routeMessage).toContain("~260 km away");
-  expect(result.routeMessage).toContain(leaving);
+it("N6-route: at 15% a 300 km route with no reachable stop never offers nonexistent stops", async () => {
+  mockRoute(300, true);
+  const result = await recommendCharging({
+    ...rangeQuery(15),
+    context: routeContext,
+  });
+  expect(result.recommendations).toEqual([]);
+  expect(result.routeMessage).toBe(
+    "No reachable stop on this route; charge before leaving or call assistance.",
+  );
+  expect(result.routeMessage).not.toContain("these");
+});
+it("P3b: an empty station region never hides a reachable destination", async () => {
+  mockDesignPack();
+  mockRoute(150, true);
+  const result = await recommendCharging({
+    ...rangeQuery(90),
+    context: routeContext,
+  });
+  expect(result.routeMessage).toBe(
+    "Reach Vijayawada with ~40% left; no charging stop needed",
+  );
+  expect(result.message).not.toContain("assistance");
+});
+it("P3b also replaces roadside advice when all stations, but not the destination, are beyond reach", async () => {
+  mockDesignPack();
+  mockRoute(150);
+  const route = await routes.findCorridor({
+    origin: assistantCenter,
+    destination,
+    bufferKm: 5,
+  });
+  vi.mocked(routes.findCorridor).mockResolvedValue({
+    ...route,
+    stations: [{ ...candidate().station, kmAlongRoute: 500, detourKm: 0 }],
+  });
+  const result = await recommendCharging({
+    ...rangeQuery(90),
+    context: routeContext,
+  });
+  expect(result.recommendations).toEqual([]);
+  expect(result.routeMessage).toContain("no charging stop needed");
+  expect(result.message).not.toContain("assistance");
+});
+it("uses the exact 10% destination threshold and the fallback road factor", async () => {
+  const pack = mockDesignPack();
+  const boundary = estimateRange(pack, 60, 60).comfortableRangeKm;
+  mockRoute(boundary - 1e-9);
+  expect(
+    (await recommendCharging({ ...rangeQuery(60), context: routeContext }))
+      .routeMessage,
+  ).toContain("optional stops");
+  mockRoute(boundary + 0.001);
+  expect(
+    (await recommendCharging({ ...rangeQuery(60), context: routeContext }))
+      .routeMessage,
+  ).toContain("charge at one");
+  mockRoute(200, false, true);
+  const result = await recommendCharging({
+    ...rangeQuery(60),
+    context: routeContext,
+  });
+  expect(result.routeMessage).toContain("~260 km");
   expect(result.approximateRoadDistances).toBe(true);
 });
-it.each([100, 275])(
-  "does not refer to nonexistent stops when the corridor is empty (%s km)",
-  async (distance) => {
-    mockRoute(distance, false, []);
-    const result = await recommendCharging(query);
-    expect(result.recommendations).toEqual([]);
-    expect(result.routeMessage).not.toMatch(/one of these|stops below/);
-    expect(result.routeMessage).toContain(
-      distance === 100
-        ? "no charging stop is needed"
-        : "No reachable charging stop was found",
-    );
-  },
-);
-it("does not tell drivers to charge before leaving when viable stops are farther along the route", async () => {
-  mockRoute(275, false, [
-    { ...plannerStation, kmAlongRoute: 100, detourKm: 1 },
-  ]);
-  expect((await recommendCharging(query)).routeMessage).toContain(
-    "stops en route",
-  );
-});
-it("trims and truncates long destination labels rather than blocking recommendations", () => {
-  const destinationName = `  ${"V".repeat(200)}  `;
-  expect(
-    recommendationSchema.parse({
-      ...query,
-      context: { ...query.context, destinationName },
-    }).context,
-  ).toMatchObject({ destinationName: "V".repeat(160) });
-});
-it("uses a neutral destination label for older callers, bounds names, and propagates service errors", async () => {
-  mockRoute();
-  expect(
-    (
-      await recommendCharging({
-        ...query,
-        context: { ...query.context, destinationName: undefined },
-      })
-    ).routeMessage,
-  ).toContain("Your destination");
-  for (const destinationName of [" ", 1])
-    expect(
-      recommendationSchema.safeParse({
-        ...query,
-        context: { ...query.context, destinationName },
-      }).success,
-    ).toBe(false);
-  vi.mocked(routes.findCorridor).mockRejectedValue(
-    new Error("routing unavailable"),
-  );
-  await expect(recommendCharging(query)).rejects.toThrow("routing unavailable");
-});
-it("ranks Bachupally above closer Pragathi Nagar chiefly for its smaller round-trip detour, with a progress bonus", () => {
-  const station = (id: string) => ({ ...plannerStation, id });
+it("keeps Bachupally ahead of Pragathi Nagar chiefly for detour, and independently rewards progress", () => {
   const pragathi = {
-    station: station("pragathi"),
-    roadDistanceKm: 2.728558799713669,
-    detourKm: 2.728558799713669,
+    ...candidate("pragathi", 2.7286),
+    detourKm: 2.7286,
     progressKm: 0,
   };
   const bachupally = {
-    station: station("bachupally"),
-    roadDistanceKm: 4.450565210122713,
-    detourKm: 0.3142355917911618,
-    progressKm: 4.136329618331551,
+    ...candidate("bachupally", 4.4506),
+    detourKm: 0.3142,
+    progressKm: 4.1363,
   };
-  const ids = (candidates: (typeof pragathi)[]) =>
-    rankRecommendations(candidates, query).recommendations.map(
+  const query = { ...rangeQuery(60), context: routeContext };
+  const ids = (entries: (typeof pragathi)[]) =>
+    rankRecommendations(entries, query).recommendations.map(
       (stop) => stop.station.id,
     );
   expect(ids([pragathi, bachupally])).toEqual(["bachupally", "pragathi"]);
@@ -155,4 +150,33 @@ it("ranks Bachupally above closer Pragathi Nagar chiefly for its smaller round-t
   expect(
     ids([pragathi, { ...bachupally, detourKm: pragathi.detourKm }]),
   ).toEqual(["bachupally", "pragathi"]);
+});
+it("bounds destination labels, supports neutral names, and propagates upstream failures safely", async () => {
+  const query = { ...rangeQuery(), context: routeContext };
+  expect(
+    recommendationSchema.parse({
+      ...query,
+      context: { ...routeContext, destinationName: `  ${"V".repeat(200)}  ` },
+    }).context,
+  ).toMatchObject({ destinationName: "V".repeat(160) });
+  for (const destinationName of [" ", 1])
+    expect(
+      recommendationSchema.safeParse({
+        ...query,
+        context: { ...routeContext, destinationName },
+      }).success,
+    ).toBe(false);
+  mockRoute(300);
+  expect(
+    (
+      await recommendCharging({
+        ...query,
+        context: { ...routeContext, destinationName: undefined },
+      })
+    ).routeMessage,
+  ).toContain("Your destination");
+  vi.mocked(routes.findCorridor).mockRejectedValue(
+    new Error("routing unavailable"),
+  );
+  await expect(recommendCharging(query)).rejects.toThrow("routing unavailable");
 });

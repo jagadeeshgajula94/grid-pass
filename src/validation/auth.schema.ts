@@ -1,6 +1,11 @@
 import { z } from "../lib/zod";
-import { EV_MODELS } from "../domain/ev-models";
-export { EV_MODELS } from "../domain/ev-models";
+import {
+  EV_MODELS,
+  VARIANT_IDS,
+  findPack,
+  legacyPack,
+} from "../domain/ev-catalogue";
+export { EV_MODELS } from "../domain/ev-catalogue";
 export const PASSWORD_RULES = [
   {
     label: "12–128 characters",
@@ -56,9 +61,17 @@ export const registerSchema = z
           ),
       ),
     evModel: z.enum(EV_MODELS),
+    variantId: z.enum(VARIANT_IDS).optional(),
     password,
   })
-  .strict();
+  .strict()
+  .refine(
+    (input) =>
+      !input.variantId ||
+      findPack(input.variantId)?.model ===
+        legacyPack(input.evModel)?.pack.model,
+    { message: "Battery pack must match the EV model", path: ["variantId"] },
+  );
 export const loginSchema = z
   .object({ email, password: z.string().min(1).max(128) })
   .strict();

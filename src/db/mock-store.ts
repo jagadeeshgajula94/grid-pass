@@ -7,6 +7,8 @@ export interface User {
   email: string;
   phone: string;
   evModel: string;
+  variantId?: string;
+  packConfirmed?: boolean;
   passwordHash: string;
   createdAt: Date;
   updatedAt: Date;

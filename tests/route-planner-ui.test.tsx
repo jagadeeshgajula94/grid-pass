@@ -349,7 +349,7 @@ it("lets guests browse stations, open the drawer and plan a route with neutral E
   expect(screen.queryByLabelText(NEARBY_RING)).toBeNull();
 });
 it("explains estimated EV range", () => {
-  expect(rangeContext("Tata Nexon EV", 275)).toContain("within your");
+  expect(rangeContext("Tata Nexon EV", 200)).toContain("within your");
   expect(rangeContext("Kia EV6", 750)).toContain("plan a charge stop");
   expect(rangeContext("unknown")).toContain("Range varies");
   expect(rangeContext("", 100, true)).toBe(GUEST_RANGE);

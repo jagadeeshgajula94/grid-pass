@@ -1,4 +1,5 @@
 import { AppError } from "../lib/errors";
+import { legacyPack } from "../domain/ev-catalogue";
 import type { Result } from "../lib/result";
 import {
   InMemoryUserRepository,
@@ -14,6 +15,8 @@ export interface UserDto {
   email: string;
   phone: string;
   evModel: string;
+  variantId?: string;
+  packConfirmed?: boolean;
 }
 interface Authenticated {
   user: UserDto;
@@ -27,6 +30,10 @@ function toDto(user: User): UserDto {
     email: user.email,
     phone: user.phone,
     evModel: user.evModel,
+    variantId: user.packConfirmed
+      ? user.variantId
+      : legacyPack(user.evModel)?.pack.id,
+    packConfirmed: user.packConfirmed ?? false,
   };
 }
 
@@ -37,6 +44,7 @@ export async function register(
   const { password, ...profile } = input;
   const result = await users.create({
     ...profile,
+    packConfirmed: !!profile.variantId,
     passwordHash: await hashPassword(password),
   });
   if (!result.ok) return result;

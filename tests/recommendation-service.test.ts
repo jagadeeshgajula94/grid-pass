@@ -1,225 +1,230 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { EV_MODELS, EV_SPECS } from "../src/domain/ev-models";
 import {
   rankRecommendations,
   recommendCharging,
-  type RecommendationCandidate,
 } from "../src/services/recommendation.service";
 import * as stations from "../src/services/station.service";
 import * as routes from "../src/services/route.service";
 import { haversineKm } from "../src/lib/geo";
-import { corridorFixture, plannerStation } from "./planner-ui-fixtures";
+import { corridorFixture } from "./planner-ui-fixtures";
+import { assistantCenter, nearbyContext } from "./recommendation-fixtures";
 import {
-  assistantCenter,
-  nearbyContext,
-  NEXON,
-} from "./recommendation-fixtures";
-import type { ConnectorDto } from "../src/domain/station";
-import type { EvModel } from "../src/domain/ev-models";
-import type { RecommendationRequest } from "../src/domain/recommendation";
-const request: RecommendationRequest & { evModel: EvModel } = {
-  evModel: NEXON,
-  batteryPercent: 35,
-  context: nearbyContext,
-};
-const gun: ConnectorDto = {
-  type: "CCS2",
-  powerKw: 120,
-  status: "available",
-  tariffInrPerKwh: null,
-};
-function candidate(
-  id = "charger",
-  distance = 5,
-  connectors = [gun],
-): RecommendationCandidate {
-  return {
-    station: { ...plannerStation, id, connectors },
-    roadDistanceKm: distance,
-    detourKm: 0,
-    progressKm: distance,
-  };
-}
+  candidate,
+  DC_PORT,
+  mockDesignPack,
+  rangeQuery,
+  XEV_59,
+  TIAGO_19,
+} from "./range-fixtures";
+import { estimateRange } from "../src/services/range.service";
 afterEach(() => vi.restoreAllMocks());
-it("has approximate, positive specs for exactly the registration models", () => {
-  expect(EV_SPECS.size).toBe(EV_MODELS.length);
-  for (const spec of EV_SPECS.values())
-    expect(Math.min(...Object.values(spec))).toBeGreaterThan(0);
-  for (const model of EV_MODELS)
-    expect(EV_SPECS.get(model)).toEqual({
-      batteryKwh: expect.any(Number),
-      ratedRangeKm: expect.any(Number),
-      maxDcKw: expect.any(Number),
-      maxAcKw: expect.any(Number),
-    });
-});
-it("enforces the unrounded 10% reserve, including an exact boundary", () => {
-  const distance = 465 * 0.9 * 0.25;
-  expect(
-    rankRecommendations([candidate("edge", distance)], request)
-      .recommendations[0]?.arrivalPercent,
-  ).toBe(10);
-  expect(
-    rankRecommendations([candidate("past", distance + 0.01)], request)
-      .recommendations,
-  ).toEqual([]);
-  expect(
-    rankRecommendations([candidate("zero", 0)], {
-      ...request,
-      batteryPercent: 10,
-    }).recommendations,
-  ).toHaveLength(1);
-  expect(
-    rankRecommendations([candidate("zero", 0)], {
-      ...request,
-      batteryPercent: 9.99,
-    }).recommendations,
-  ).toEqual([]);
-});
-it("rejects incompatible, busy, offline and zero-power ports and caps DC and AC power", () => {
-  const bad = [
-    candidate("incompatible", 0, [{ ...gun, type: "CHADEMO" }]),
-    candidate("busy", 0, [{ ...gun, status: "busy" }]),
-    candidate("offline", 0, [{ ...gun, status: "offline" }]),
-    candidate("zero", 0, [{ ...gun, powerKw: 0 }]),
-  ];
-  expect(rankRecommendations(bad, request).recommendations).toEqual([]);
+it("P2: shows the 500 m busy Nizampet charger at 10% in B, never a false A claim", () => {
   const result = rankRecommendations(
     [
-      candidate("dc", 0, [gun, { ...gun, status: "busy" }]),
-      candidate("ac", 0, [{ ...gun, type: "TYPE2", powerKw: 22 }]),
+      candidate("busy", 0.5 * 1.3, [
+        { ...DC_PORT, powerKw: 30, status: "busy" },
+      ]),
     ],
-    request,
+    rangeQuery(10, XEV_59),
   );
+  expect(result.usableRangeKm).toBeCloseTo(35.76, 1);
+  expect(result.tier).toBe("B");
+  expect(result.message).toContain("Low battery");
+  expect(result.message).not.toContain("≥10%");
+  expect(result.recommendations[0]).toMatchObject({
+    arrivalPercent: 9.8,
+    chargeMinutes: 91,
+    effectivePowerKw: 30,
+    wait: { minutes: 30, estimated: true, unverified: true },
+  });
+});
+it("P1: Nexon 45 at 35% has ~119 km and a top three comfortable list", () => {
+  mockDesignPack();
+  const result = rankRecommendations(
+    [
+      candidate("a", 1),
+      candidate("b", 2),
+      candidate("c", 3),
+      candidate("d", 5),
+    ],
+    rangeQuery(),
+  );
+  expect(result.usableRangeKm).toBeCloseTo(119.3, 1);
+  expect(result.tier).toBe("A");
+  expect(result.recommendations).toHaveLength(3);
   expect(
-    result.recommendations.map(({ effectivePowerKw }) => effectivePowerKw),
-  ).toEqual([60, 7.2]);
-  expect(result.recommendations[0]?.reason).toContain(
-    "1 of 2 compatible ports free",
+    result.recommendations.every((stop) => stop.arrivalPercent >= 33),
+  ).toBe(true);
+});
+it("N4: only offline or incompatible ports are not candidates", () => {
+  const result = rankRecommendations(
+    [
+      candidate("off", 0, [{ ...DC_PORT, status: "offline" }]),
+      candidate("wrong", 0, [{ ...DC_PORT, type: "CHADEMO" }]),
+      candidate("zero", 0, [{ ...DC_PORT, powerKw: 0 }]),
+    ],
+    rangeQuery(),
   );
-  expect(result.recommendations[0]?.chargeMinutes).toBe(
-    Math.ceil(((40.5 * (0.8 - 0.35)) / 60) * 1.1 * 60),
+  expect(result.recommendations).toEqual([]);
+  expect(result.message).toContain("No compatible chargers here");
+  expect(rankRecommendations([], rangeQuery()).recommendations).toEqual([]);
+});
+it("N6: Tiago 19.2 at 3%, nearest 12 km straight-line, offers no stops", () => {
+  const result = rankRecommendations(
+    [candidate("far", 12 * 1.3)],
+    rangeQuery(3, TIAGO_19),
+  );
+  expect(result.usableRangeKm).toBeCloseTo(5.51, 1);
+  expect(result.recommendations).toEqual([]);
+  expect(result.message).toBe(
+    "Nearest charger ~16 km, you have ~5 km: call roadside assistance.",
   );
 });
-it("returns at most three, rewards free guns in nearby and area modes, and breaks ties by speed then id", () => {
-  const candidates = [
-    candidate("slow", 0, [{ ...gun, powerKw: 30 }]),
-    candidate("fast-b", 0),
-    candidate("fast-a", 0),
-    candidate("many", 0, [gun, gun]),
-  ];
+it("B<10: at 5% even a zero-distance charger can only be B", () => {
+  const result = rankRecommendations([candidate("here", 0)], rangeQuery(5));
+  expect(result.tier).toBe("B");
+  expect(result.recommendations[0]?.tier).toBe("B");
+  expect(result.message).not.toContain("≥10%");
+});
+it("keeps exact A and F eligibility boundaries and hides B only when A exists", () => {
+  const pack = mockDesignPack();
+  expect(rankRecommendations([candidate("here", 0)], rangeQuery(10)).tier).toBe(
+    "A",
+  );
+  const range = estimateRange(pack, 100);
+  const edge = range.reachableRangeKm;
+  expect(
+    rankRecommendations([candidate("edge", edge)], rangeQuery(100))
+      .recommendations,
+  ).toHaveLength(1);
+  expect(
+    rankRecommendations(
+      [candidate("outside", edge + 0.000001)],
+      rangeQuery(100),
+    ).recommendations,
+  ).toEqual([]);
+  const mixed = rankRecommendations(
+    [candidate("comfortable", 0), candidate("low", 110)],
+    rangeQuery(),
+  );
+  expect(mixed.recommendations.map((stop) => stop.station.id)).toEqual([
+    "comfortable",
+  ]);
+});
+it("busy and unknown remain reachable, use flagged waits, and offline ports neither boost count nor power", () => {
+  const result = rankRecommendations(
+    [
+      candidate("busy", 1, [
+        { ...DC_PORT, status: "busy" },
+        { ...DC_PORT, status: "busy" },
+      ]),
+      candidate("unknown", 1, [
+        { ...DC_PORT, status: "unknown" },
+        { ...DC_PORT, status: "offline" },
+      ]),
+      candidate("free", 1, [
+        { ...DC_PORT, powerKw: 20 },
+        { ...DC_PORT, powerKw: 400, status: "busy" },
+      ]),
+    ],
+    rangeQuery(),
+  );
+  const byId = new Map(
+    result.recommendations.map((stop) => [stop.station.id, stop]),
+  );
+  expect(byId.get("busy")?.wait).toEqual({
+    minutes: 15,
+    availability: "busy",
+    estimated: true,
+    unverified: true,
+  });
+  expect(byId.get("unknown")?.reason).toContain("availability unknown");
+  expect(byId.get("unknown")?.wait.minutes).toBe(10);
+  expect(byId.get("free")?.effectivePowerKw).toBe(20);
+});
+it("B ranks by unrounded distance, then wait plus charge, then power and id", () => {
+  const busy = [{ ...DC_PORT, status: "busy" as const }];
+  const result = rankRecommendations(
+    [
+      candidate("far-free", 1),
+      candidate("near-busy", 0.9, busy),
+      candidate("near-free", 0.9),
+    ],
+    rangeQuery(5),
+  );
+  expect(result.recommendations.map((stop) => stop.station.id)).toEqual([
+    "near-free",
+    "near-busy",
+    "far-free",
+  ]);
+});
+it("A nearby/area rewards free ports and breaks ties by higher capped power then id", () => {
   for (const mode of ["nearby", "area"] as const) {
-    const ranked = rankRecommendations(candidates, {
-      ...request,
-      batteryPercent: 100,
-      context: { ...nearbyContext, mode },
-    });
-    expect(ranked.recommendations.map(({ station }) => station.id)).toEqual([
+    const result = rankRecommendations(
+      [
+        candidate("slow", 0, [{ ...DC_PORT, powerKw: 30 }]),
+        candidate("fast-b", 0),
+        candidate("fast-a", 0),
+        candidate("many", 0, [DC_PORT, DC_PORT]),
+      ],
+      { ...rangeQuery(100), context: { ...nearbyContext, mode } },
+    );
+    expect(result.recommendations.map((stop) => stop.station.id)).toEqual([
       "many",
       "fast-a",
       "fast-b",
     ]);
     expect(
-      ranked.recommendations.every(({ chargeMinutes }) => chargeMinutes === 0),
+      result.recommendations.every((stop) => stop.chargeMinutes === 0),
     ).toBe(true);
   }
 });
-it("balances drive and charge time rather than only power", () => {
-  const near = candidate("near", 0, [{ ...gun, powerKw: 30 }]);
-  const distant = candidate("distant", 15);
-  expect(
-    rankRecommendations([distant, near], request).recommendations[0]?.station
-      .id,
-  ).toBe("near");
-});
-it("rewards route progress when reachable, but penalizes detour plus charging time", () => {
-  const context = {
-    mode: "route",
-    origin: assistantCenter,
-    destination: { lat: 16.5062, lng: 80.648 },
-    bufferKm: 5,
-  } as const;
-  const early = candidate("early", 5);
-  const later = candidate("later", 60);
-  const detour = {
-    ...later,
-    station: { ...later.station, id: "detour" },
-    detourKm: 20,
-  };
-  expect(
-    rankRecommendations([early, later, detour], {
-      ...request,
-      batteryPercent: 90,
-      context,
-    }).recommendations.map(({ station }) => station.id),
-  ).toEqual(["later", "early", "detour"]);
-});
-it("plainly explains low battery, unreachable free chargers and empty or incompatible data", () => {
-  const low = rankRecommendations([candidate("near", 2)], {
-    ...request,
-    batteryPercent: 3,
-  });
-  expect(low.recommendations).toEqual([]);
-  expect(low.message).toContain("~2 km; you have ~0 km with that reserve");
-  expect(low.reachableRangeKm).toBe(0);
-  expect(rankRecommendations([], request).message).toContain(
-    "No available compatible chargers",
-  );
-});
 it.each(["nearby", "area"] as const)(
-  "uses existing station service and road factor for %s",
+  "searches %s independently of car position and measures energy from the car",
   async (mode) => {
     const station = {
-      ...plannerStation,
+      ...candidate().station,
+      ...assistantCenter,
       lat: assistantCenter.lat + 0.01,
-      lng: assistantCenter.lng,
     };
+    const region = { lat: assistantCenter.lat + 0.2, lng: assistantCenter.lng };
     const nearby = vi.spyOn(stations, "findNearby").mockResolvedValue({
       stations: [station],
-      center: assistantCenter,
+      center: region,
       radiusKm: 10,
       sources: ["local"],
     });
-    const context = { ...nearbyContext, mode, radiusKm: 10 };
     const result = await recommendCharging(
-      { ...request, context },
-      "test-request",
+      { ...rangeQuery(), context: { mode, center: region, radiusKm: 10 } },
+      "request",
     );
-    expect(nearby).toHaveBeenCalledWith(
-      { ...assistantCenter, radiusKm: 10 },
-      "test-request",
-    );
+    expect(nearby).toHaveBeenCalledWith({ ...region, radiusKm: 10 }, "request");
     expect(result.recommendations[0]?.roadDistanceKm).toBeCloseTo(
-      Math.round(haversineKm(assistantCenter, station) * 13) / 10,
+      haversineKm(assistantCenter, station) * 1.3,
     );
   },
 );
 it.each([false, true])(
-  "uses route progress plus detour, conservative when fallback=%s",
+  "uses route car projection and road factor, fallback=%s",
   async (fallback) => {
-    const corridor = vi.spyOn(routes, "findCorridor").mockResolvedValue({
+    vi.spyOn(routes, "findCorridor").mockResolvedValue({
       ...corridorFixture,
-      route: { ...corridorFixture.route, fallback },
-      stations: [{ ...plannerStation, kmAlongRoute: 20, detourKm: 4 }],
-    });
-    const context = {
-      mode: "route",
-      origin: assistantCenter,
-      destination: { lat: 16, lng: 80 },
-      bufferKm: 10,
-    } as const;
-    const result = await recommendCharging(
-      { ...request, context },
-      "route-request",
-    );
-    expect(corridor).toHaveBeenCalledWith(
-      {
-        origin: assistantCenter,
-        destination: context.destination,
-        bufferKm: 10,
+      route: {
+        ...corridorFixture.route,
+        coordinates: [assistantCenter, { lat: 16, lng: 80 }],
+        fallback,
       },
-      "route-request",
-    );
+      stations: [{ ...candidate().station, kmAlongRoute: 20, detourKm: 4 }],
+    });
+    const result = await recommendCharging({
+      ...rangeQuery(90),
+      context: {
+        mode: "route",
+        origin: assistantCenter,
+        destination: { lat: 16, lng: 80 },
+        bufferKm: 5,
+      },
+    });
     expect(result.recommendations[0]?.roadDistanceKm).toBeCloseTo(
       24 * (fallback ? 1.3 : 1),
     );
