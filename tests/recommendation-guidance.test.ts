@@ -32,6 +32,29 @@ function mockRoute(distance: number, empty = false, fallback = false): void {
   });
 }
 afterEach(() => vi.restoreAllMocks());
+it("gives a reachable destination with Tier B optional stops no urgent charging advice", async () => {
+  mockDesignPack();
+  mockRoute(10);
+  const corridor = await routes.findCorridor({
+    origin: assistantCenter,
+    destination,
+    bufferKm: 5,
+  });
+  vi.mocked(routes.findCorridor).mockResolvedValue({
+    ...corridor,
+    stations: [{ ...candidate().station, kmAlongRoute: 8, detourKm: 8 }],
+  });
+  const result = await recommendCharging({
+    ...rangeQuery(15),
+    context: routeContext,
+  });
+  expect(result.tier).toBe("B");
+  expect(result.recommendations).toHaveLength(1);
+  expect(result.recommendations[0]?.arrivalPercent).toBeLessThan(10);
+  expect(result.routeMessage).toContain("optional stops below");
+  expect(result.message).toContain("optional");
+  expect(JSON.stringify(result)).not.toMatch(/go now|drive gently/);
+});
 it("P3: 90% Nexon 45, 150 km at 60 km/h, arrives at 40.5% and stops are optional", async () => {
   mockDesignPack();
   mockRoute(150);

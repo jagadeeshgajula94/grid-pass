@@ -42,6 +42,7 @@ interface ScoredRecommendation {
   score: number;
   secondary: number;
 }
+const LOW_BATTERY_PREFIX = "Low battery, go now · ";
 function scoreCandidate(
   candidate: RecommendationCandidate,
   query: ResolvedRequest,
@@ -82,7 +83,7 @@ function scoreCandidate(
       roadDistanceKm: candidate.roadDistanceKm,
       tier,
       wait: ports.wait,
-      reason: `${tier === "B" ? "Low battery, go now · " : ""}${waitDescription(ports)} · ${ports.powerKw} kW · arrive ~${displayArrival}% · ~${Math.round(charge)} min to 80%`,
+      reason: `${tier === "B" ? LOW_BATTERY_PREFIX : ""}${waitDescription(ports)} · ${ports.powerKw} kW · arrive ~${displayArrival}% · ~${Math.round(charge)} min to 80%`,
     },
   };
 }
@@ -226,11 +227,21 @@ function withRouteMessage(
   );
   return {
     ...result,
-    message:
-      arrival >= 10 && !result.recommendations.length
-        ? "No charging stop needed for this route."
-        : result.message,
+    ...(arrival >= 10 ? reachableDestination(result) : {}),
     routeMessage: routeMessage(query.context, distance, arrival, result),
+  };
+}
+function reachableDestination(
+  result: RecommendationDto,
+): Pick<RecommendationDto, "message" | "recommendations"> {
+  return {
+    message: result.recommendations.length
+      ? "Destination reachable with reserve · optional charging stops below."
+      : "No charging stop needed for this route.",
+    recommendations: result.recommendations.map((stop) => ({
+      ...stop,
+      reason: stop.reason.replace(LOW_BATTERY_PREFIX, ""),
+    })),
   };
 }
 export async function recommendCharging(
