@@ -14,7 +14,7 @@ import { PlaceAutocomplete } from "../src/components/map/PlaceAutocomplete";
 import { useCorridor } from "../src/components/map/use-corridor";
 import { rangeContext } from "../src/components/map/ev-range";
 import { estimateRange } from "../src/domain/range";
-import { packById } from "./range-fixtures";
+import { NEXON_45, packById } from "./range-fixtures";
 import type { MapCanvas } from "../src/components/map/MapCanvas";
 import {
   corridorFixture,
@@ -27,6 +27,8 @@ const SEARCH_PLACES = "Search places";
 const EXPLICIT_SEARCH_MODE = "mode=search";
 const ARIA_ACTIVE_DESCENDANT = "aria-activedescendant";
 const ARIA_EXPANDED = "aria-expanded";
+const WITHIN_RANGE = "within your";
+const PLAN_CHARGE_STOP = "plan a charge stop";
 const GUEST_RANGE = "Sign in to see range for your EV";
 const FIT_REQUEST = "data-fit-request";
 const mapView = vi.hoisted(() => ({
@@ -351,8 +353,8 @@ it("lets guests browse stations, open the drawer and plan a route with neutral E
   expect(screen.queryByLabelText(NEARBY_RING)).toBeNull();
 });
 it("explains estimated EV range", () => {
-  expect(rangeContext("Tata Nexon EV", 150)).toContain("within your");
-  expect(rangeContext("Kia EV6", 750)).toContain("plan a charge stop");
+  expect(rangeContext("Tata Nexon EV", 150)).toContain(WITHIN_RANGE);
+  expect(rangeContext("Kia EV6", 750)).toContain(PLAN_CHARGE_STOP);
   expect(rangeContext("unknown")).toContain("Range varies");
   expect(rangeContext("", 100, true)).toBe(GUEST_RANGE);
 });
@@ -365,10 +367,10 @@ it.each([300, 600, 200, undefined, 0])(
       "Tata Nexon EV",
       400,
       false,
-      { variantId: "tata-nexon-ev-45", packConfirmed: true },
+      { variantId: NEXON_45, packConfirmed: true },
       duration,
     );
-    expect(text).toContain("plan a charge stop");
+    expect(text).toContain(PLAN_CHARGE_STOP);
     expect(text).toContain(`~${Math.floor(range)} km`);
     expect(text).toContain("full charge");
     expect(text).toContain("conservative");
@@ -376,7 +378,7 @@ it.each([300, 600, 200, undefined, 0])(
 );
 it("uses a confirmed pack for the planner range, while an unconfirmed account stays conservative", async () => {
   mockPlanner();
-  const accountPack = { variantId: "tata-nexon-ev-45", packConfirmed: false };
+  const accountPack = { variantId: NEXON_45, packConfirmed: false };
   const { rerender } = render(
     <MapWorkspace evModel="Tata Nexon EV" accountPack={accountPack} />,
   );
@@ -411,7 +413,7 @@ it("never promises EV range when only fallback geometry is available", async () 
     "Road distance unavailable",
   );
   expect(rangeContext("Tata Nexon EV", undefined, true)).not.toContain(
-    "within your",
+    WITHIN_RANGE,
   );
 });
 
@@ -423,9 +425,9 @@ it("compares route distance with the unrounded conservative reach", () => {
       "Tata Nexon EV",
       distance,
       false,
-      { variantId: "tata-nexon-ev-45", packConfirmed: true },
+      { variantId: NEXON_45, packConfirmed: true },
       (distance / 80) * 60,
     );
-    expect(text.includes("within your")).toBe(offset < 0);
+    expect(text.includes(WITHIN_RANGE)).toBe(offset < 0);
   }
 });
