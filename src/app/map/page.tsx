@@ -12,6 +12,10 @@ export default async function MapPage(): Promise<ReactElement> {
     <MapWorkspace
       firstName={result.value.fullName.split(" ")[0] ?? "Driver"}
       evModel={result.value.evModel}
+      accountPack={{
+        variantId: result.value.variantId,
+        packConfirmed: result.value.packConfirmed,
+      }}
     />
   );
 }

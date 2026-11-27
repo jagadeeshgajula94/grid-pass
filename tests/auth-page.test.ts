@@ -64,6 +64,7 @@ it("passes the active user's first name and registered EV model to the workspace
     expect((await MapPage()).props).toEqual({
       firstName,
       evModel: expect.any(String),
+      accountPack: { variantId: expect.any(String), packConfirmed: false },
     });
   }
 });

@@ -47,7 +47,9 @@ it("renders inline strict validation errors on blur and submit", () => {
     "email-error",
   );
   fireEvent.click(screen.getByRole("button", { name: "Create account ↗" }));
-  expect(screen.getByText("Choose your EV model")).toBeInTheDocument();
+  expect(
+    screen.getByText("Choose your EV model and battery pack"),
+  ).toBeInTheDocument();
 });
 it.each(["login", "register"] as const)(
   "uses native POST for %s when JavaScript is unavailable",

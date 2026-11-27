@@ -17,6 +17,13 @@ export const assistantResponse: RecommendationDto = {
   usableRangeKm: 146,
   reachableRangeKm: 104,
   approximateRoadDistances: true,
+  variantId: "tata-nexon-ev-45",
+  packConfirmed: true,
+  carPosition: assistantCenter,
+  positionSource: "gps",
+  consumptionWhPerKm: 132,
+  comfortableRangeKm: 85,
+  tier: "A",
   message: "Best charging options with a 10% arrival reserve",
   recommendations: [
     {
@@ -26,6 +33,13 @@ export const assistantResponse: RecommendationDto = {
       arrivalPercent: 34,
       chargeMinutes: 21,
       roadDistanceKm: 2,
+      tier: "A",
+      wait: {
+        minutes: 0,
+        estimated: true,
+        unverified: true,
+        availability: "free",
+      },
       reason:
         "1 of 1 compatible ports free · 60 kW · arrive with ~34% · ~21 min to 80%",
     },

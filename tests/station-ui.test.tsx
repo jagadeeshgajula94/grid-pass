@@ -19,6 +19,14 @@ const busyPort: ConnectorDto = {
   tariffInrPerKwh: null,
   status: "busy",
 };
+it("does not mislabel unknown occupancy as offline", () => {
+  expect(
+    stationSummary({
+      ...station,
+      connectors: [{ ...busyPort, status: "unknown" }],
+    }).status,
+  ).toBe("unknown");
+});
 
 const station: StationDto = {
   id: "one",

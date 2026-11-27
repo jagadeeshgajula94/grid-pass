@@ -10,6 +10,7 @@ export interface PlannerProps {
   destination: PlaceDto | null;
   bufferKm: number;
   evModel: string;
+  accountPack?: { variantId?: string; packConfirmed?: boolean };
   route?: RouteSummaryDto;
   onOrigin: (place: PlaceDto) => void;
   onDestination: (place: PlaceDto) => void;
@@ -155,6 +156,8 @@ export function RoutePlanner(props: PlannerProps): ReactElement {
           props.evModel,
           props.route?.totalDistanceKm,
           props.route?.fallback,
+          props.accountPack,
+          props.route?.estimatedDurationMin,
         )}
       </p>
     </section>

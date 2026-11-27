@@ -39,9 +39,10 @@ function connectorsOf(poi: OcmPoi): ConnectorDto[] {
           powerKw: connection.PowerKW ?? 0,
           tariffInrPerKwh: null,
           status:
-            connection.StatusType?.IsOperational === true
-              ? ("available" as const)
-              : ("offline" as const),
+            (connection.StatusType?.IsOperational ??
+              poi.StatusType?.IsOperational) === false
+              ? ("offline" as const)
+              : ("unknown" as const),
         }))
       : [];
   });
@@ -59,6 +60,7 @@ function toStation(poi: OcmPoi): StationDto {
       .join(", ")
       .slice(0, 300),
     connectors: connectorsOf(poi),
+    statusSource: "unknown occupancy",
     amenities: [],
     lastUpdated: poi.DateLastStatusUpdate ?? "1970-01-01T00:00:00.000Z",
   };

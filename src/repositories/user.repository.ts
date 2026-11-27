@@ -8,9 +8,24 @@ export interface UserRepository {
   findByEmail(email: string): Promise<User | null>;
   findById(id: string): Promise<User | null>;
   create(input: NewUser): Promise<Result<User, AppError>>;
+  updatePack(
+    id: string,
+    pack: Pick<User, "evModel" | "variantId" | "packConfirmed">,
+  ): Promise<User | null>;
 }
 
 export class InMemoryUserRepository implements UserRepository {
+  async updatePack(
+    id: string,
+    pack: Pick<User, "evModel" | "variantId" | "packConfirmed">,
+  ): Promise<User | null> {
+    const store = await getMockStore();
+    const user = store.users.get(id);
+    if (!user) return null;
+    const updated = { ...user, ...pack, updatedAt: new Date() };
+    store.users.set(id, updated);
+    return updated;
+  }
   async findByEmail(email: string): Promise<User | null> {
     const store = await getMockStore();
     return (

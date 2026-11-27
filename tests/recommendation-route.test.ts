@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { POST } from "../src/app/api/recommendations/charging/route";
 import * as service from "../src/services/recommendation.service";
 import { getCurrentUser } from "../src/services/auth.service";
+import * as auth from "../src/services/auth.service";
 import { requestToken } from "../src/lib/auth-http";
 import { recommendationSchema } from "../src/validation/recommendation.schema";
 import { plannerCookie } from "./planner-test-helpers";
@@ -10,7 +11,14 @@ import {
   nearbyContext,
   NEXON,
 } from "./recommendation-fixtures";
-const query = { batteryPercent: 35, evModel: NEXON, context: nearbyContext };
+const query = {
+  batteryPercent: 35,
+  evModel: NEXON,
+  variantId: "tata-nexon-ev-45",
+  carPosition: nearbyContext.center,
+  positionSource: "gps" as const,
+  context: nearbyContext,
+};
 function request(body: unknown, cookie = ""): Request {
   return new Request("http://localhost:3000/api/recommendations/charging", {
     method: "POST",
@@ -19,6 +27,34 @@ function request(body: unknown, cookie = ""): Request {
   });
 }
 afterEach(() => vi.restoreAllMocks());
+it("keeps a server-confirmed account pack authoritative over the body's larger pack", async () => {
+  vi.spyOn(auth, "getCurrentUser").mockResolvedValue({
+    ok: true,
+    value: {
+      fullName: "Driver",
+      email: "driver@example.com",
+      phone: "+919876543210",
+      evModel: "Kia EV6",
+      variantId: "kia-ev6-77.4",
+      packConfirmed: true,
+    },
+  });
+  const recommend = vi
+    .spyOn(service, "recommendCharging")
+    .mockResolvedValue(assistantResponse);
+  expect(
+    (await POST(request({ ...query, variantId: "kia-ev6-84" }))).status,
+  ).toBe(200);
+  expect(recommend).toHaveBeenCalledWith(
+    {
+      ...query,
+      evModel: "Kia EV6",
+      variantId: "kia-ev6-77.4",
+      packConfirmed: true,
+    },
+    expect.any(String),
+  );
+});
 it("allows guests with a model and returns no-store recommendation DTOs", async () => {
   const recommend = vi
     .spyOn(service, "recommendCharging")
@@ -27,13 +63,16 @@ it("allows guests with a model and returns no-store recommendation DTOs", async 
   expect(response.status).toBe(200);
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(await response.json()).toEqual(assistantResponse);
-  expect(recommend).toHaveBeenCalledWith(query, expect.any(String));
+  expect(recommend).toHaveBeenCalledWith(
+    { ...query, packConfirmed: true },
+    expect.any(String),
+  );
 });
 it("asks guests for a model but resolves the active session's model from its cookie, overriding the body", async () => {
   const recommend = vi
     .spyOn(service, "recommendCharging")
     .mockResolvedValue(assistantResponse);
-  const missing = { ...query, evModel: undefined };
+  const missing = { ...query, evModel: undefined, variantId: undefined };
   const response = await POST(request(missing));
   expect(response.status).toBe(400);
   expect((await response.json()).error).toContain("Choose an EV model");
@@ -45,12 +84,22 @@ it("asks guests for a model but resolves the active session's model from its coo
     (await POST(request({ ...query, evModel: "Kia EV6" }, cookie))).status,
   ).toBe(200);
   expect(recommend).toHaveBeenLastCalledWith(
-    { ...query, evModel: user.value.evModel },
+    {
+      ...query,
+      evModel: user.value.evModel,
+      variantId: user.value.variantId,
+      packConfirmed: false,
+    },
     expect.any(String),
   );
   expect((await POST(request(missing, cookie))).status).toBe(200);
   expect(recommend).toHaveBeenLastCalledWith(
-    { ...query, evModel: user.value.evModel },
+    {
+      ...query,
+      evModel: user.value.evModel,
+      variantId: user.value.variantId,
+      packConfirmed: false,
+    },
     expect.any(String),
   );
 });
@@ -63,9 +112,16 @@ it("rejects malformed and oversized JSON, invalid models, non-finite numbers and
     {},
     { ...query, batteryPercent: 0 },
     { ...query, batteryPercent: 101 },
+    { ...query, batteryPercent: 120 },
     { ...query, batteryPercent: "35" },
     { ...query, batteryPercent: Infinity },
     { ...query, evModel: "unlisted" },
+    { ...query, variantId: "unlisted" },
+    { ...query, carPosition: undefined },
+    { ...query, carPosition: { lat: 91, lng: 0 } },
+    { ...query, carPosition: { lat: 0, lng: -181 } },
+    { ...query, carPosition: { lat: 0, lng: 0, extra: true } },
+    { ...query, positionSource: "map" },
     { ...query, extra: true },
     { ...query, context: { ...nearbyContext, center: { lat: 91, lng: 78 } } },
     { ...query, context: { ...nearbyContext, center: { lat: 17, lng: -181 } } },

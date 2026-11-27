@@ -19,6 +19,7 @@ const profile = {
 };
 const BASE = "http://localhost:3000/api/auth/";
 const COOKIE_HEADER = "set-cookie";
+const CONFIRMED_VARIANT = "tata-nexon-ev-45";
 function request(action: string, body?: unknown, cookie = ""): Request {
   return new Request(`${BASE}${action}`, {
     method: action === "me" ? "GET" : "POST",
@@ -30,6 +31,21 @@ function cookieOf(response: Response): string {
   return response.headers.get(COOKIE_HEADER)?.split(";")[0] ?? "";
 }
 beforeEach(resetMockStore);
+it("persists an explicitly selected pack on the mock account and exposes its confirmation", async () => {
+  const registered = await register(
+    request("register", { ...profile, variantId: CONFIRMED_VARIANT }),
+  );
+  expect(registered.status).toBe(201);
+  const identity = await me(request("me", undefined, cookieOf(registered)));
+  expect(await identity.json()).toMatchObject({
+    user: { variantId: CONFIRMED_VARIANT, packConfirmed: true },
+  });
+  const stored = await new InMemoryUserRepository().findByEmail(profile.email);
+  expect(stored).toMatchObject({
+    variantId: CONFIRMED_VARIANT,
+    packConfirmed: true,
+  });
+});
 
 it("logs out a proxied Next route request with browser headers and no body", async () => {
   const registered = await register(request("register", profile));
@@ -69,6 +85,8 @@ it("registers, logs in, reads allowlisted identity, and revokes on logout", asyn
     "email",
     "phone",
     "evModel",
+    "variantId",
+    "packConfirmed",
   ]);
   expect(JSON.stringify(body)).not.toContain("passwordHash");
   expect(body.user.phone).toBe("+919876543210");

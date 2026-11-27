@@ -249,6 +249,7 @@ function useStationReturnFocus(selected: StationDto | null): void {
 interface ContentProps {
   state: WorkspaceState;
   evModel: string;
+  accountPack?: { variantId?: string; packConfirmed?: boolean };
   sheet: ReturnType<typeof useSheet>;
   searchRequest?: number;
   onSearchReady?: () => void;
@@ -261,6 +262,7 @@ function discoverySummary(state: WorkspaceState): string {
 function PlannerContent({
   state,
   evModel,
+  accountPack,
   sheet,
   searchRequest,
   onSearchReady,
@@ -270,6 +272,7 @@ function PlannerContent({
       <RoutePlanner
         {...state.planner}
         evModel={evModel}
+        accountPack={accountPack}
         route={state.route}
         searchRequest={searchRequest}
         onSearchReady={onSearchReady}
@@ -459,7 +462,9 @@ function WorkspacePanel({
       {assistant.opened ? (
         <ChargeAssistant
           context={assistantContext(state)}
+          position={assistantPosition(state)}
           evModel={evModel}
+          accountPack={props.accountPack}
           onBack={assistant.close}
           onShow={assistant.show}
           onReset={assistant.reset}
@@ -496,9 +501,11 @@ function WorkspaceActions({
 export function MapWorkspace({
   firstName,
   evModel = "",
+  accountPack,
 }: {
   firstName?: string;
   evModel?: string;
+  accountPack?: { variantId?: string; packConfirmed?: boolean };
 }): ReactElement {
   const state = useWorkspace();
   const sheet = useSheet();
@@ -524,6 +531,7 @@ export function MapWorkspace({
         state={state}
         sheet={sheet}
         evModel={evModel}
+        accountPack={accountPack}
         assistant={assistant}
         onHeight={setSheetHeight}
         onSearch={() => {
@@ -536,4 +544,13 @@ export function MapWorkspace({
       />
     </main>
   );
+}
+
+function assistantPosition(
+  state: WorkspaceState,
+):
+  | { carPosition: { lat: number; lng: number }; positionSource: "gps" }
+  | undefined {
+  if (state.planner.destination || !state.search.position) return undefined;
+  return { carPosition: state.search.position, positionSource: "gps" };
 }

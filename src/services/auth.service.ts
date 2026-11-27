@@ -1,4 +1,5 @@
 import { AppError } from "../lib/errors";
+import { findPack, legacyPack } from "../domain/ev-catalogue";
 import type { Result } from "../lib/result";
 import {
   InMemoryUserRepository,
@@ -14,11 +15,14 @@ export interface UserDto {
   email: string;
   phone: string;
   evModel: string;
+  variantId?: string;
+  packConfirmed?: boolean;
 }
 interface Authenticated {
   user: UserDto;
   token: string;
 }
+const AUTH_REQUIRED = "Authentication required";
 const users: UserRepository = new InMemoryUserRepository();
 
 function toDto(user: User): UserDto {
@@ -27,7 +31,43 @@ function toDto(user: User): UserDto {
     email: user.email,
     phone: user.phone,
     evModel: user.evModel,
+    variantId: user.packConfirmed
+      ? user.variantId
+      : legacyPack(user.evModel)?.pack.id,
+    packConfirmed: user.packConfirmed ?? false,
   };
+}
+export async function confirmPack(
+  token: string,
+  variantId: string,
+): Promise<Result<UserDto, AppError>> {
+  const id = await activeSession(token);
+  const user = id ? await users.findById(id) : null;
+  if (!user)
+    return {
+      ok: false,
+      error: new AppError("UNAUTHENTICATED", AUTH_REQUIRED),
+    };
+  const pack = findPack(variantId);
+  if (!pack || pack.model !== legacyPack(user.evModel)?.pack.model)
+    return {
+      ok: false,
+      error: new AppError(
+        "VALIDATION",
+        "Choose a supported battery pack for your account model",
+      ),
+    };
+  const updated = await users.updatePack(user.id, {
+    evModel: pack.model,
+    variantId: pack.id,
+    packConfirmed: true,
+  });
+  return updated
+    ? { ok: true, value: toDto(updated) }
+    : {
+        ok: false,
+        error: new AppError("UNAUTHENTICATED", AUTH_REQUIRED),
+      };
 }
 
 export async function register(
@@ -37,6 +77,7 @@ export async function register(
   const { password, ...profile } = input;
   const result = await users.create({
     ...profile,
+    packConfirmed: !!profile.variantId,
     passwordHash: await hashPassword(password),
   });
   if (!result.ok) return result;
@@ -83,7 +124,7 @@ export async function getCurrentUser(
   if (!user)
     return {
       ok: false,
-      error: new AppError("UNAUTHENTICATED", "Authentication required"),
+      error: new AppError("UNAUTHENTICATED", AUTH_REQUIRED),
     };
   return { ok: true, value: toDto(user) };
 }

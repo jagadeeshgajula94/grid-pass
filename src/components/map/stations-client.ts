@@ -13,13 +13,14 @@ export const stationSchema = z.object({
   distanceKm: z.number().min(0).max(50),
   address: z.string().max(300),
   lastUpdated: z.iso.datetime({ offset: true }),
+  statusSource: z.enum(["demo", "unknown occupancy"]).optional(),
   amenities: z.array(z.enum(["restroom", "cafe", "dining", "wifi"])),
   connectors: z.array(
     z.object({
       type: z.enum(CONNECTORS),
       powerKw: z.number().min(0).max(400),
       tariffInrPerKwh: z.number().nonnegative().nullable(),
-      status: z.enum(["available", "busy", "offline"]),
+      status: z.enum(["available", "busy", "unknown", "offline"]),
     }),
   ),
 });

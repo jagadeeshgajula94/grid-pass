@@ -264,6 +264,67 @@
   font-size: 11px;
   line-height: 1.6;
 }
+.vehicle-picker {
+  border: 0;
+  padding: 0;
+  margin: 12px 0;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.vehicle-picker label {
+  display: grid;
+  gap: 6px;
+}
+.vehicle-picker select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+}
+.vehicle-picker small,
+.occupancy-note {
+  display: block;
+  color: var(--muted);
+}
+.account-pack {
+  padding: 12px;
+  border: 1px solid #d99732;
+  border-radius: 12px;
+}
+.account-pack p {
+  font-size: 13px;
+}
+.assistant-result-low {
+  border-color: #d99732;
+  border-left-width: 4px;
+}
+.assistant-results[data-tier="B"] .assistant-guidance {
+  padding: 12px;
+  border: 1px solid #d99732;
+  border-radius: 10px;
+  background: color-mix(in srgb, #d99732 15%, transparent);
+  font-weight: 600;
+}
+.assistant-status-row {
+  gap: 8px;
+  font-size: 12px;
+}
+.assistant-tier {
+  font-weight: 700;
+}
+.assistant-sources summary {
+  cursor: pointer;
+  min-height: 32px;
+}
+.assistant-sources p {
+  overflow-wrap: anywhere;
+}
 .recommendation-map-highlight {
   z-index: 0;
   pointer-events: none;

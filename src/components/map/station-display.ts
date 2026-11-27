@@ -20,6 +20,7 @@ export const NETWORK_BADGES: Record<Network, { short: string; color: string }> =
     other: { short: "EV", color: "#94a3b8" },
   };
 export const STATUS_COLORS = {
+  unknown: "#94a3b8",
   available: "#10B981",
   busy: "#F59E0B",
   offline: "#EF4444",
@@ -33,9 +34,12 @@ export function stationSummary(station: StationDto): {
   const available = station.connectors.filter(
     (port) => port.status === "available",
   ).length;
-  const status = station.connectors.some((port) => port.status === "busy")
+  const occupied = station.connectors.some((port) => port.status === "busy")
     ? "busy"
     : "offline";
+  const status = station.connectors.some((port) => port.status === "unknown")
+    ? "unknown"
+    : occupied;
   return {
     available,
     total: station.connectors.length,

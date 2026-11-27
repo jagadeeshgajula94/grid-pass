@@ -40,6 +40,7 @@ export const ocmPoiSchema = z.object({
     Longitude: z.number().min(-180).max(180),
   }),
   OperatorInfo: z.object({ Title: optionalText }).nullish(),
+  StatusType: z.object({ IsOperational: z.boolean().nullish() }).nullish(),
   Connections: z
     .array(
       z.object({

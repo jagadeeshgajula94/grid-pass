@@ -22,6 +22,34 @@ const FIND_STOPS = "Find charging stops";
 const BATTERY_PERCENT = "Battery percentage";
 const UPDATE_STOPS = "Update stops";
 const RECOMMENDATIONS = "Charging recommendations";
+it("submits GPS independently of the area, keeps results pinned, and notices later GPS changes", async () => {
+  const fetcher = mockFetch();
+  const position = {
+    carPosition: { lat: 17.517, lng: 78.385 },
+    positionSource: "gps" as const,
+  };
+  const { result, rerender } = renderHook(
+    ({ current }) =>
+      useChargeAssistant(
+        { ...nearbyContext, mode: "area" },
+        NEXON,
+        undefined,
+        current,
+      ),
+    { initialProps: { current: position } },
+  );
+  act(() => result.current.submit());
+  await waitFor(() => expect(result.current.data).not.toBeNull());
+  expect(JSON.parse(fetcher.mock.calls[0]?.[1].body)).toMatchObject(position);
+  rerender({
+    current: {
+      ...position,
+      carPosition: { ...position.carPosition, lat: 17.52 },
+    },
+  });
+  expect(result.current.data).not.toBeNull();
+  expect(result.current.contextChanged).toBe(true);
+});
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -49,9 +77,7 @@ it("collects a guest model, syncs slider/number, explains results, shows a stati
   );
   expect(screen.getByRole("button", { name: "Back" })).toHaveFocus();
   expect(screen.getByRole("button", { name: FIND_STOPS })).toBeDisabled();
-  fireEvent.change(screen.getByLabelText("Your EV model"), {
-    target: { value: NEXON },
-  });
+  chooseNexon();
   fireEvent.change(screen.getByLabelText("Battery level"), {
     target: { value: "60" },
   });
@@ -69,7 +95,10 @@ it("collects a guest model, syncs slider/number, explains results, shows a stati
       body: JSON.stringify({
         batteryPercent: 35,
         evModel: NEXON,
+        variantId: "tata-nexon-ev-45",
         context: nearbyContext,
+        carPosition: nearbyContext.center,
+        positionSource: "assumed",
       }),
     }),
   );
@@ -164,12 +193,17 @@ it("aborts input changes, explicit resubmissions and unmount, but keeps requests
 });
 it("rejects invalid response data and handles transport failures and cancellation", async () => {
   const fetcher = mockFetch();
-  const query = { batteryPercent: 35, context: nearbyContext };
+  const query = {
+    batteryPercent: 35,
+    context: nearbyContext,
+    carPosition: nearbyContext.center,
+    positionSource: "gps" as const,
+  };
   fetcher.mockResolvedValueOnce(
     Response.json({
       ...assistantResponse,
       recommendations: [
-        { ...assistantResponse.recommendations[0], arrivalPercent: 9 },
+        { ...assistantResponse.recommendations[0], arrivalPercent: -1 },
       ],
     }),
   );
@@ -291,3 +325,12 @@ it.each([
     expect(screen.queryByRole("button", { name: UPDATE_STOPS })).toBeNull();
   },
 );
+
+function chooseNexon(): void {
+  fireEvent.change(screen.getByLabelText("Your EV model"), {
+    target: { value: NEXON },
+  });
+  fireEvent.change(screen.getByLabelText("Battery pack"), {
+    target: { value: "tata-nexon-ev-45" },
+  });
+}
