@@ -18,6 +18,32 @@ import {
 } from "./range-fixtures";
 import { estimateRange } from "../src/services/range.service";
 afterEach(() => vi.restoreAllMocks());
+it.each([true, false])(
+  "does not infer stranding from an unreachable panned area (has station: %s)",
+  async (hasStation) => {
+    const center = { lat: assistantCenter.lat, lng: assistantCenter.lng + 0.3 };
+    vi.spyOn(stations, "findNearby").mockResolvedValue({
+      stations: hasStation ? [{ ...candidate().station, ...center }] : [],
+      center,
+      radiusKm: 5,
+      sources: ["local"],
+    });
+    const result = await recommendCharging({
+      ...rangeQuery(3, TIAGO_19),
+      context: { mode: "area", center, radiusKm: 5 },
+    });
+    expect(stations.findNearby).toHaveBeenCalledWith(
+      { ...center, radiusKm: 5 },
+      undefined,
+    );
+    expect(result.recommendations).toEqual([]);
+    expect(result.message).toContain(
+      "No charger in this area is within your range",
+    );
+    expect(result.message).toContain("nearby search around your car");
+    expect(result.message).not.toContain("assistance");
+  },
+);
 it("P2: shows the 500 m busy Nizampet charger at 10% in B, never a false A claim", () => {
   const result = rankRecommendations(
     [

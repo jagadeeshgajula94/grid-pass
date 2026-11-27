@@ -104,7 +104,7 @@ function response(
   approximateRoadDistances: boolean,
 ): RecommendationDto {
   const tier = recommendations[0]?.tier ?? null;
-  let message = emptyRecommendationMessage(nearest, range);
+  let message = emptyRecommendationMessage(nearest, range, query.context.mode);
   if (tier === "A") message = "Best charging options · estimated arrival ≥10%";
   if (tier === "B")
     message =

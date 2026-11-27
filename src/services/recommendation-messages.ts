@@ -6,7 +6,10 @@ import type { RangeEstimate } from "./range.service";
 export function emptyRecommendationMessage(
   nearestKm: number,
   range: RangeEstimate,
+  mode: RecommendationContext["mode"],
 ): string {
+  if (mode === "area")
+    return "No charger in this area is within your range. Try a nearby search around your car's position.";
   if (!Number.isFinite(nearestKm))
     return "No compatible chargers here. Try a wider radius, route buffer or move the map.";
   return `Nearest charger ~${Math.round(nearestKm)} km, you have ~${Math.round(range.reachableRangeKm)} km: call roadside assistance.`;
