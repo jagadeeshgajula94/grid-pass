@@ -22,7 +22,7 @@ import {
   estimateRange,
   predictedArrival,
   type RangeEstimate,
-} from "./range.service";
+} from "../domain/range";
 import {
   emptyRecommendationMessage,
   routeMessage,

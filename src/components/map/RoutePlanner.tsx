@@ -157,6 +157,7 @@ export function RoutePlanner(props: PlannerProps): ReactElement {
           props.route?.totalDistanceKm,
           props.route?.fallback,
           props.accountPack,
+          props.route?.estimatedDurationMin,
         )}
       </p>
     </section>

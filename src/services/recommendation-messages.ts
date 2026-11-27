@@ -2,7 +2,7 @@ import type {
   RecommendationContext,
   RecommendationDto,
 } from "../domain/recommendation";
-import type { RangeEstimate } from "./range.service";
+import type { RangeEstimate } from "../domain/range";
 export function emptyRecommendationMessage(
   nearestKm: number,
   range: RangeEstimate,

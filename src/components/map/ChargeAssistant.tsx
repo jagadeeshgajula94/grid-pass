@@ -3,7 +3,7 @@ import { ArrowLeft, Zap } from "lucide-react";
 import { EV_MODELS, findPack, legacyPack } from "../../domain/ev-catalogue";
 import { VehiclePicker, packLabel } from "../VehiclePicker";
 import { AccountPack } from "./AccountPack";
-import { estimateRange } from "../../services/range.service";
+import { estimateRange } from "../../domain/range";
 import type {
   ChargingRecommendation,
   RecommendationContext,
